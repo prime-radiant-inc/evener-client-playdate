@@ -5,5 +5,5 @@ useDefault = true
 description = "lwIP SNMP function declaration contains parameter names, not credentials"
 condition = "AND"
 paths = ['''^vendor/lwip/src/include/lwip/apps/snmpv3\.h$''']
-regexTarget = "line"
-regexes = ['''^err_t snmpv3_get_user\(const char\* username, snmpv3_auth_algo_t \*auth_algo, u8_t \*auth_key, snmpv3_priv_algo_t \*priv_algo, u8_t \*priv_key\);$''']
+regexTarget = "match"
+regexes = ['''^auth_key, snmpv3_priv_algo_t $''']

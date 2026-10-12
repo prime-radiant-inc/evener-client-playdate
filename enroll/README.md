@@ -27,12 +27,16 @@ there. To continue an interrupted login or refresh metadata for the same node:
 
 ```sh
 # An interrupted first login, before exporting to a native owner:
-./enroll --refresh
+./enroll --refresh --peer your-hub --hostname evener-playdate
 # After native ownership, stop the device and retrieve its current private config:
-./enroll --refresh --adopt-native-config /private/path/to/current-tailnet.json
+./enroll --refresh --peer your-hub --hostname evener-playdate \
+  --adopt-native-config /private/path/to/current-tailnet.json
 ```
 
-Do not run enrollment or refresh while the Playdate is using this node identity.
+Repeat the same peer and hostname on refresh. These flags are not inferred from
+the prior export; omitting them uses the helper's defaults (`magic-kingdom` and
+`playdate-derp-spike`). Do not run enrollment or refresh while the Playdate is
+using this node identity.
 `--refresh` reuses the isolated state; it does not request a new identity.
 Export creates a `native-owner` marker. Subsequent refresh refuses to start tsnet
 unless `--adopt-native-config` explicitly supplies the native owner's current
@@ -90,7 +94,8 @@ To extend the existing isolated configuration with control credentials without
 starting tsnet, WireGuard, or DERP:
 
 ```sh
-./enroll --control-only --state-dir ../build/enrollment --out ../Source/tailnet.json
+./enroll --control-only --hostname evener-playdate \
+  --state-dir ../build/enrollment --out ../Source/tailnet.json
 ```
 
 This reads only the tool-owned isolated machine key and existing node profile.
