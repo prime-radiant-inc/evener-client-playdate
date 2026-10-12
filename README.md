@@ -5,8 +5,11 @@ Evener Hub over AppWire v7 through its own Tailscale DERP/WireGuard connection,
 and to OpenAI Realtime transcription over SDK TLS. Native control-plane
 maintenance refreshes the enrolled identity and selected Hub peer. Runtime
 needs no Mac helper or application proxy. The client's source and vendor trees
-contain its audio, networking and control dependencies; the separate
-[voice spike](../playdate-transcription) is not a build dependency.
+contain its audio, networking and control dependencies. Building the app does
+not require an Evener source checkout.
+
+See the [client guide](docs/client.md), [source provenance](docs/provenance.md),
+and [physical qualification report](docs/qualification/2026-10-10-native-client.md).
 
 ## Controls
 
@@ -47,10 +50,15 @@ this client's scope. Use another Evener client for those interactions.
 
 ## Configure and build
 
+Acoustic setup requires a Hub with the shared device-pairing API and Web UI.
+That integration remains in the Evener development branch; this repository
+does not deploy it. For a Hub without that feature, use the baked-in destination
+configuration below. Ordinary session browsing and voice use the existing Hub API.
+
 Install Playdate SDK 3.1.2 and a full ARM GNU toolchain with newlib. Node 22+
 is needed only to generate the private configuration.
 
-From this directory:
+Clone `prime-radiant-inc/evener-client-playdate` and run from its root:
 
 ```sh
 node --env-file=/path/to/openai.env configure.mjs \
@@ -73,7 +81,7 @@ The invitation supplies the address and a short-lived secret. The Playdate
 contacts that Hub with its own temporary key. Compare the six-digit codes and
 approve that device in the browser. The Hub returns the credential encrypted to
 the approved key; press A on the Playdate to save the reviewed destination.
-The [shared protocol](../../docs/device-pairing.md) also supplies QR invitations
+The [shared protocol reference](docs/device-pairing.md) also supplies QR invitations
 to the native phone app. The Hub and Web UI have no device-specific pairing API.
 
 For Tailscale, the device shows the official sign-in QR if it needs enrollment;
@@ -90,7 +98,7 @@ To bake in a destination instead, replace `--setup-only` with
 `--hub-url http://your-hub:9180 --hub-token-file /path/to/hub-token`.
 The token file contains only the Hub authentication token. Optionally,
 `--tailnet-config /path/to/private-tailnet.json` supplies the isolated node
-configuration exported by the one-shot [enrollment helper](../playdate-derp/enroll).
+configuration exported by the one-shot [enrollment helper](enroll/README.md).
 It must include its machine identity, control public key and stable selected
 peer ID. Enrollment needs the person's Tailscale authorization. Runtime
 maintenance uses that identity directly from the handheld. `--output DIR` writes
@@ -256,13 +264,7 @@ new automated tests.
 The opt-in acoustic checks use synthetic credentials and never contact a provider:
 
 ```sh
-# From cmd/evener-hub/frontend:
-node scripts/check-playdate-pairing.mjs
-
-# From the repository root (isolated Hub, browser, C and phone protocol):
-EVENER_PAIRING_E2E=1 go test ./cmd/evener-hub -run TestDevicePairingBrowserRoundTrip -v
-
-# From tools/playdate-client, independent storage qualification:
+# From this repository root, independent storage qualification:
 make -f check/Makefile build/check/storage
 build/check/storage
 
@@ -270,6 +272,24 @@ build/check/storage
 make -f check/Makefile build/check/network-socket
 build/check/network-socket
 ```
+
+The cross-client acoustic checks live with the shared pairing implementation in
+Evener. With its pairing development branch checked out and frontend dependencies
+installed, point that checkout at this client explicitly:
+
+```sh
+export EVENER_PLAYDATE_CLIENT=/absolute/path/to/evener-client-playdate
+export PLAYDATE_SDK_PATH=/path/to/PlaydateSDK
+
+# From the Evener checkout's cmd/evener-hub/frontend directory:
+node scripts/check-playdate-pairing.mjs
+
+# From the Evener checkout's root (isolated Hub, browser, C and phone protocol):
+EVENER_PAIRING_E2E=1 go test ./cmd/evener-hub -run TestDevicePairingBrowserRoundTrip -v
+```
+
+These optional interoperability checks need both repositories; the app build and
+local storage/socket checks need only this repository and the SDK.
 
 The browser check runs real Web Audio at desktop and phone sizes, generates a
 shared invitation QR and sound, decodes both, approves through a real local Hub,

@@ -1,5 +1,10 @@
 # Native Playdate client qualification
 
+This is the historical qualification record from the Evener source repository.
+Commit IDs and `tools/playdate-client/` paths refer to that source tree; private
+captures stay in the original local worktree and are not distributed here. The
+standalone layout is documented in [source provenance](../provenance.md).
+
 ## Status
 
 The qualified client source is `168de9dfac`, including socket ownership

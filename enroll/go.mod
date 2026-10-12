@@ -1,4 +1,4 @@
-module playdate-derp-enroll
+module github.com/prime-radiant-inc/evener-client-playdate/enroll
 
 go 1.27.1
 

@@ -9,3 +9,7 @@ Source/pdex.*
 
 # Explicit physical-device qualification input.
 Source/device-check.ref
+
+# Local build environments and agent scratch.
+.superpowers/
+node_modules/

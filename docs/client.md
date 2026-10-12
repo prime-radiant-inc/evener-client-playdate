@@ -1,8 +1,8 @@
 # Playdate client
 
-The [native Playdate client](../../tools/playdate-client/README.md) provides
+The [native Playdate client](../README.md) provides
 session navigation, chat transcripts and reviewed voice input. It is a private
-C client using the existing [AppWire protocol](../appwire-protocol.md). It
+C client using the existing [AppWire protocol](https://github.com/prime-radiant-inc/evener/blob/main/docs/appwire-protocol.md). It
 connects to the Hub through its native Tailscale DERP/WireGuard byte stream and
 to OpenAI through a separate SDK TLS connection for transcription. The device
 owns transport and control-plane recovery without an application proxy or
@@ -13,7 +13,7 @@ ongoing Mac helper.
 An authenticated browser opens **Settings → Mobile app → Pair a device** and
 creates an invitation for the desired Hub and connection type. The device's
 system menu exposes **Network → Receive setup**; an unconfigured build opens it
-on launch. The browser plays the shared [device invitation](../device-pairing.md)
+on launch. The browser plays the shared [device invitation](device-pairing.md)
 as sound. It contains the Hub address and a temporary invitation secret, not a
 Hub credential. The microphone queues PCM; the game loop decodes and verifies
 complete fragments. Repeated playback repairs missing fragments.

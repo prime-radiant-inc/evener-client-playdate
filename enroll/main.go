@@ -1,4 +1,4 @@
-// enroll prepares an isolated Tailscale identity for the native Playdate probe.
+// enroll prepares an isolated Tailscale identity for the native Playdate client.
 package main
 
 import (
@@ -73,7 +73,7 @@ func main() {
 
 func run() error {
 	state := flag.String("state-dir", "../build/enrollment", "dedicated state directory for this Playdate identity")
-	out := flag.String("out", "../Source/config.json", "private native configuration output")
+	out := flag.String("out", "../Source/tailnet.json", "private native configuration output")
 	peerName := flag.String("peer", "magic-kingdom", "exact peer hostname, DNS name, or Tailscale IP")
 	hostname := flag.String("hostname", "playdate-derp-spike", "name of the separate enrolled node")
 	controlOnly := flag.Bool("control-only", false, "export control credentials from isolated state without starting the enrolled node")

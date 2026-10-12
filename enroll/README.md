@@ -1,7 +1,7 @@
 # Playdate node enrollment
 
 This one-shot Mac helper uses official `tsnet` and its local API to enroll a
-separate Tailscale node for the native DERP feasibility probe. It neither reads
+separate Tailscale node for the native Playdate client. It neither reads
 the Mac's Tailscale state nor contacts its local daemon. There is no persistent
 relay or proxy process.
 
@@ -12,10 +12,10 @@ export GOWORK=off
 export GOMODCACHE="$PWD/.cache/mod"
 export GOCACHE="$PWD/.cache/build"
 go build -o enroll .
-./enroll
+./enroll --peer your-hub --hostname evener-playdate
 ```
 
-The helper prints the normal Tailscale sign-in URL for Jesse to approve. It
+The helper prints the normal Tailscale sign-in URL for the operator to approve. It
 does not open a browser or approve enrollment. Existing tailnet policies may
 require separate device approval; the helper waits without changing them.
 Ambient auth-key, OAuth and forced-login environment variables are rejected so
@@ -44,13 +44,15 @@ tsnet. The marker prevents a plain refresh from silently restarting an old key.
 Tailscale may rotate an expired node key during normal authentication, so
 refresh the native configuration together with the exported metadata.
 
-After authentication, the helper finds `magic-kingdom` in the new node's own
+After authentication, the helper finds the selected `--peer` in the new node's own
 permitted network map, reads that peer's IPv4/public key/home DERP region, and
 checks that the isolated stored private key matches the authenticated self node.
 It closes tsnet before making a brief official DERP client connection to obtain
 the relay's public key over verified TLS. That connection also closes before
-the private configuration is exported to `../Source/config.json` with mode 0600.
-The parent probe's ignore rules must exclude `build/` and `Source/config.json`.
+the private configuration is exported to `../Source/tailnet.json` with mode 0600.
+The repository ignores `build/` and `Source/tailnet.json`. Run `configure.mjs`
+from the repository root with `--tailnet-config Source/tailnet.json` to produce
+the separate app configuration; the two files have different schemas.
 
 The native fields are:
 
@@ -72,13 +74,13 @@ The native fields are:
   identity triggers the service's copied-state restriction. `enrolled_os` does
   not describe the handheld hardware; the client is native Playdate C.
 - `node_key_expiry`, `peer_key_expiry`, node/peer stable IDs, home region codes,
-  selected DERP region ID, and export timestamp: metadata for the probe.
+  selected DERP region ID, and export timestamp: metadata for the native client.
 
 DERP regions do not forward between regions. The helper records both home
 regions and reports a mismatch, because native return routing must account for
 the enrolled node's advertised home region. It does not rewrite tailnet policy
 or claim that DERP authentication alone proves a WireGuard or application
-connection. The native probe must establish that evidence.
+connection. The native client must establish that evidence.
 
 Official references: [tsnet server API](https://tailscale.com/docs/reference/tsnet-server-api)
 and [pinned implementation](https://github.com/tailscale/tailscale/tree/v1.104.1).
@@ -88,7 +90,7 @@ To extend the existing isolated configuration with control credentials without
 starting tsnet, WireGuard, or DERP:
 
 ```sh
-./enroll --control-only --state-dir ../build/enrollment --out ../Source/config.json
+./enroll --control-only --state-dir ../build/enrollment --out ../Source/tailnet.json
 ```
 
 This reads only the tool-owned isolated machine key and existing node profile.
@@ -120,7 +122,7 @@ engine reports that explicitly without activating the candidate. Its
 preserves the pending candidate. A completed authenticated map supplies the
 replacement identity; the platform persists it before activating the transport.
 
-`tools/playdate-client/src/control_host.c` is an opt-in OpenSSL interop runner,
+`src/control_host.c` is an opt-in OpenSSL interop runner,
 excluded from the handheld build. Link it with `json.c`, the transport sources
 in `transport.mk`, and the HPACK/control sources and flags in `control.mk`.
 Run it only while every other owner of this isolated node is stopped:
