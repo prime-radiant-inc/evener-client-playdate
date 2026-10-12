@@ -1,0 +1,6 @@
+name=Evener
+author=Prime Radiant
+description=Evener conversations with a live voice composer.
+bundleID=com.primeradiant.evener.client
+version=0.1.0
+buildNumber=1

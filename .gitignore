@@ -1,0 +1,11 @@
+build/
+Source/config.json
+Source/tailnet.json
+Source/pdex.*
+*.pdx/
+*.pdx.zip
+.env*
+.DS_Store
+
+# Explicit physical-device qualification input.
+Source/device-check.ref
