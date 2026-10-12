@@ -4,6 +4,7 @@
 enum PairingResult { PAIRING_RUNNING, PAIRING_CANCELLED, PAIRING_APPLIED };
 bool pairing_begin(void);
 bool pairing_active(void);
+bool pairing_ready_to_save(void);
 void pairing_pause(void);
 void pairing_resume(void);
 enum PairingResult pairing_update(PDButtons pressed);

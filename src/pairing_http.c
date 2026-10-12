@@ -70,7 +70,7 @@ static enum PairingHTTPResult reply(uint8_t *envelope, size_t capacity, size_t *
             }
             if (ok) { *length = n / 2; result = PAIRING_HTTP_APPROVED; }
             else { snprintf(status, sizeof(status), "Invalid approval. Start setup again."); result = PAIRING_HTTP_ENDED; }
-        } else snprintf(status, sizeof(status), "Approve this matching code in the browser.");
+        } else snprintf(status, sizeof(status), "If all lines match, approve in the browser.");
     } else snprintf(status, sizeof(status), "Unexpected Hub reply. Reconnecting...");
     json_free(&json); close_stream(); retry = app_time() + 1.2f;
     if (result != PAIRING_HTTP_WAIT) active = false;
