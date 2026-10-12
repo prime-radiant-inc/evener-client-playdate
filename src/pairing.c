@@ -14,7 +14,7 @@ static uint8_t secret[32], envelope[PAIRING_MAX_BYTES];
 static char public_key[65], status[160];
 static PairingInvitation invitation;
 static PairingSettings candidate;
-static unsigned comparison;
+static char comparison[PAIRING_COMPARISON_SIZE];
 static float started;
 static AudioBuffer audio;
 static ChirpDecoder decoder;
@@ -146,7 +146,7 @@ enum PairingResult pairing_update(PDButtons pressed) {
     if (chirp_complete(&decoder)) {
         if (pairing_invitation(decoder.bytes, decoder.length, &invitation)) {
             stop_mic(); received_invitation = true; started = app_time();
-            pairing_claim_key(&invitation, secret, public_key, &comparison);
+            pairing_claim_key(&invitation, secret, public_key, comparison);
             settings_bootstrap_begin(&invitation.destination);
             if (config.use_tailnet && !tailnet_device_initialize()) {
                 end_attempt("Could not save Tailscale identity. Press A to retry setup."); return PAIRING_RUNNING;
@@ -173,13 +173,13 @@ void pairing_draw(LCDFont *font) {
     if (received_invitation && !terminal) {
         const char *auth = config.use_tailnet && !review ? tailnet_device_auth_url() : "";
         if (auth[0] && pairing_draw_qr(auth, 5, 31, 184)) {
-            snprintf(summary, sizeof(summary), "Sign in to Tailscale\n\n%s\n\nThen compare: %06u", auth, comparison);
+            snprintf(summary, sizeof(summary), "Sign in to Tailscale\n\n%s\n\nThen return to compare the Hub code.", auth);
             text(summary, 199, 36, 193, 157);
             text("B Cancel", 8, 223, 384, 16);
             return;
         }
-        snprintf(summary, sizeof(summary), "%s:%u\n%s\n\nCompare code: %06u", invitation.destination.host, invitation.destination.port,
-            invitation.destination.tailnet ? "Tailscale" : invitation.destination.tls ? "Wi-Fi with TLS" : "Wi-Fi", comparison);
+        snprintf(summary, sizeof(summary), "%s:%u\n%s\n\nCompare code:\n%.19s\n%s", invitation.destination.host, invitation.destination.port,
+            invitation.destination.tailnet ? "Tailscale" : invitation.destination.tls ? "Wi-Fi with TLS" : "Wi-Fi", comparison, comparison + 20);
         text(summary, 12, 38, 376, 110);
         text(status, 12, 159, 376, 55);
         text(review ? "A Save setup    B Cancel" : "B Cancel    Approve in browser", 8, 223, 384, 16);

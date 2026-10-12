@@ -1,11 +1,9 @@
 # Device pairing protocol reference
 
-The canonical contract is `docs/device-pairing.md` in
-[Evener](https://github.com/prime-radiant-inc/evener). This reference accompanies
-the client source imported from `f25067ae4052c7cea48b0385d60aea923b28633f`; the
-shared pairing implementation is still on its development branch. Protocol
-changes belong in Evener first, with this reference refreshed in the same client
-change. The Hub and native mobile app share this contract.
+The canonical [device pairing contract](https://github.com/prime-radiant-inc/evener/blob/main/docs/device-pairing.md)
+belongs to Evener. This client implements that shared Hub and native-mobile
+contract. Update the canonical contract first and refresh this reference in the
+same client change.
 
 Evener Hubs are self-hosted. Pairing starts in an already authenticated Hub Web
 UI; there is no global directory, rendezvous service, or shared pairing server.
@@ -30,7 +28,12 @@ the invitation and cannot be moved to another key. A different device needs a
 new invitation. A party hearing the sound can submit a competing claim, but
 cannot decrypt the selected device's result or silently replace that claim.
 
-The six digits authenticate the operator's choice; they are not an encryption
+Closing setup cancels an untouched pending invitation. Once the operator submits
+approval, closing the browser leaves the invitation retrievable until expiry:
+an acknowledgement lost on the way back must not revoke a committed approval.
+The explicit cancel method still revokes the named invitation.
+
+The fingerprint authenticates the operator's choice; it is not an encryption
 key. The encrypted response is bound to the selected X25519 key. HTTP over
 Tailscale relies on the tailnet for transport authentication/encryption; a
 phone uses its installed Tailscale connection and Playdate uses its native
@@ -42,6 +45,9 @@ on the receiving device and the code before approving.
 ## Hub authority
 
 Authenticated AppWire methods:
+
+These methods act on the connected Hub's own invitations and credential. They
+are not forwarded through the host administration proxy.
 
 | Method | Parameters | Result |
 | --- | --- | --- |
@@ -116,9 +122,14 @@ The code is SHA-512 over these concatenated bytes:
 2. The 24 raw invitation bytes.
 3. The client's 32 raw X25519 public key bytes.
 
-Interpret the first three digest bytes as an unsigned big-endian integer,
-reduce modulo 1,000,000, and display as six zero-padded decimal digits. Clients
-must not substitute a code supplied by a network response for their own result.
+Encode the first 16 digest bytes as 32 lowercase hexadecimal digits, grouped in
+eight groups of four separated by hyphens, for example
+`2be9-271d-6222-d455-d2d1-c217-62b2-3b82`. Display and compare every group. The
+128-bit fingerprint resists offline searches for a key matching an observed
+claim; a short decimal reduction does not. The Hub refuses approval when two
+distinct claims have the same fingerprint, and the operator starts a new
+invitation. Clients must not substitute a fingerprint supplied by a network
+response for their own result.
 
 ## Invitation bytes (EVI1)
 
@@ -191,3 +202,22 @@ CRC covers its first 55 bytes. Twelve silent symbols separate frames. Complete
 messages require every fragment and a matching message CRC. Replaying the same
 invitation fills missing fragments; a different length or message CRC resets
 the assembly. Frame checksums detect corruption, not malicious senders.
+
+## Cross-client qualification
+
+The Playdate implementation lives in
+[evener-client-playdate](https://github.com/prime-radiant-inc/evener-client-playdate).
+For the optional acoustic C/browser check and the full isolated-Hub pairing
+check, set `EVENER_PLAYDATE_CLIENT` to that checkout's absolute path and
+`PLAYDATE_SDK_PATH` to the SDK directory:
+
+```sh
+# From cmd/evener-hub/frontend:
+node scripts/check-playdate-pairing.mjs
+
+# From the Evener repository root:
+EVENER_PAIRING_E2E=1 go test ./cmd/evener-hub -run TestDevicePairingBrowserRoundTrip -v
+```
+
+These checks use synthetic credentials and an isolated local Hub. Ordinary
+Evener tests do not require the standalone client or Playdate SDK.

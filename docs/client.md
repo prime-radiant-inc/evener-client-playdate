@@ -19,7 +19,7 @@ Hub credential. The microphone queues PCM; the game loop decodes and verifies
 complete fragments. Repeated playback repairs missing fragments.
 
 The device generates an ephemeral key and contacts the advertised Hub. Both
-screens independently show the same six-digit comparison code. After the person
+screens independently show the same 128-bit comparison fingerprint (eight groups of four hex digits). After the person
 approves that exact code in the authenticated browser, the Hub releases the
 credential encrypted to that device key. The Playdate verifies the envelope and
 its destination, then offers A to save the reviewed settings. B cancels without
