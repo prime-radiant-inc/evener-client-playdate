@@ -12,7 +12,7 @@ static NetSocket *socket;
 static bool active, opening, allowed, asking, denied;
 static uintptr_t permission_generation;
 static float opened, retry;
-static char request[1024], input[4096], body[3072], expected_code[7], status[160];
+static char request[1024], input[4096], body[3072], expected_code[PAIRING_COMPARISON_SIZE], status[160];
 static size_t request_length, sent, received;
 static void close_stream(void) {
     net_close(socket); socket = NULL;
@@ -23,7 +23,7 @@ void pairing_http_stop(void) {
     close_stream(); active = allowed = asking = denied = false; permission_generation++;
     memset(request, 0, sizeof(request)); memset(input, 0, sizeof(input)); memset(body, 0, sizeof(body));
 }
-void pairing_http_start(const PairingInvitation *invitation, const char public_key[65], unsigned comparison) {
+void pairing_http_start(const PairingInvitation *invitation, const char public_key[65], const char comparison[PAIRING_COMPARISON_SIZE]) {
     pairing_http_stop();
     char invitation_hex[49], payload[256];
     for (unsigned i = 0; i < 24; i++) snprintf(invitation_hex + i * 2, 3, "%02x", invitation->secret[i]);
@@ -31,7 +31,7 @@ void pairing_http_start(const PairingInvitation *invitation, const char public_k
     int total = snprintf(request, sizeof(request), "POST /api/device-pairing HTTP/1.1\r\nHost: %s:%u\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", invitation->destination.host, invitation->destination.port, n, payload);
     active = n > 0 && (size_t)n < sizeof(payload) && total > 0 && (size_t)total < sizeof(request);
     request_length = active ? (size_t)total : 0; retry = 0;
-    snprintf(expected_code, sizeof(expected_code), "%06u", comparison);
+    snprintf(expected_code, sizeof(expected_code), "%s", comparison);
     snprintf(status, sizeof(status), "Connecting to the Hub for approval...");
 }
 static void permission(bool granted, void *context) {
@@ -48,7 +48,7 @@ static int unhex(char c) {
     return -1;
 }
 static enum PairingHTTPResult reply(uint8_t *envelope, size_t capacity, size_t *length) {
-    Json json; char state[24], comparison[8];
+    Json json; char state[24], comparison[PAIRING_COMPARISON_SIZE];
     if (!json_parse(&json, body, strlen(body))) { reconnect("Invalid Hub reply. Reconnecting..."); return PAIRING_HTTP_WAIT; }
     bool parsed = json_field(&json, 0, "state", state, sizeof(state));
     enum PairingHTTPResult result = PAIRING_HTTP_WAIT;

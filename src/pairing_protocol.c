@@ -83,7 +83,7 @@ bool pairing_invitation(const uint8_t *bytes, size_t length, PairingInvitation *
     memcpy(out->destination.path, bytes + 33 + bytes[7], bytes[8]);
     return strlen(out->destination.host) == bytes[7] && !strcmp(out->destination.path, "/rpc") && valid_destination(&out->destination);
 }
-void pairing_claim_key(const PairingInvitation *invitation, const uint8_t secret[32], char public_hex[65], unsigned *comparison) {
+void pairing_claim_key(const PairingInvitation *invitation, const uint8_t secret[32], char public_hex[65], char comparison[PAIRING_COMPARISON_SIZE]) {
     static const char domain[] = "evener-pairing-v1", hex[] = "0123456789abcdef";
     uint8_t public[32], input[sizeof(domain) - 1 + 24 + 32], digest[64];
     crypto_scalarmult_base(public, secret);
@@ -91,7 +91,12 @@ void pairing_claim_key(const PairingInvitation *invitation, const uint8_t secret
     public_hex[64] = 0;
     memcpy(input, domain, sizeof(domain) - 1); memcpy(input + sizeof(domain) - 1, invitation->secret, 24);
     memcpy(input + sizeof(domain) - 1 + 24, public, 32); crypto_hash(digest, input, sizeof(input));
-    *comparison = (((unsigned)digest[0] << 16) | ((unsigned)digest[1] << 8) | digest[2]) % 1000000;
+    unsigned at = 0;
+    for (unsigned i = 0; i < 16; i++) {
+        if (i && !(i % 2)) comparison[at++] = '-';
+        comparison[at++] = hex[digest[i] >> 4]; comparison[at++] = hex[digest[i] & 15];
+    }
+    comparison[at] = 0;
 }
 bool pairing_approved(const uint8_t *bytes, size_t length, const PairingInvitation *invitation,
     const uint8_t secret[32], PairingSettings *out) {

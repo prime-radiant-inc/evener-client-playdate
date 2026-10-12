@@ -1,11 +1,9 @@
 # Device pairing protocol reference
 
-The canonical contract is `docs/device-pairing.md` in
-[Evener](https://github.com/prime-radiant-inc/evener). This reference accompanies
-the client source imported from `f25067ae4052c7cea48b0385d60aea923b28633f`; the
-shared pairing implementation is still on its development branch. Protocol
-changes belong in Evener first, with this reference refreshed in the same client
-change. The Hub and native mobile app share this contract.
+The canonical [device pairing contract](https://github.com/prime-radiant-inc/evener/blob/main/docs/device-pairing.md)
+belongs to Evener. This client implements that shared Hub and native-mobile
+contract. Update the canonical contract first and refresh this reference in the
+same client change.
 
 Evener Hubs are self-hosted. Pairing starts in an already authenticated Hub Web
 UI; there is no global directory, rendezvous service, or shared pairing server.
@@ -30,7 +28,12 @@ the invitation and cannot be moved to another key. A different device needs a
 new invitation. A party hearing the sound can submit a competing claim, but
 cannot decrypt the selected device's result or silently replace that claim.
 
-The six digits authenticate the operator's choice; they are not an encryption
+Closing setup cancels an untouched pending invitation. Once the operator submits
+approval, closing the browser leaves the invitation retrievable until expiry:
+an acknowledgement lost on the way back must not revoke a committed approval.
+The explicit cancel method still revokes the named invitation.
+
+The fingerprint authenticates the operator's choice; it is not an encryption
 key. The encrypted response is bound to the selected X25519 key. HTTP over
 Tailscale relies on the tailnet for transport authentication/encryption; a
 phone uses its installed Tailscale connection and Playdate uses its native
@@ -42,6 +45,9 @@ on the receiving device and the code before approving.
 ## Hub authority
 
 Authenticated AppWire methods:
+
+These methods act on the connected Hub's own invitations and credential. They
+are not forwarded through the host administration proxy.
 
 | Method | Parameters | Result |
 | --- | --- | --- |
@@ -58,11 +64,17 @@ are pruned on access. A Hub restart discards all pending invitations. Existing
 saved client credentials remain valid. `mobile_base_url`, when configured,
 takes precedence over the browser's proposed origin.
 
+Creating an invitation requires a Hub credential of 1–511 non-space printable
+ASCII bytes, matching the envelope receivers. Unsupported credentials are
+reported before an invitation is issued; ordinary Hub authentication is unchanged.
+
 `tailnet` marks a destination reached through Tailscale. A tailnet locator may
 use MagicDNS. Direct HTTP retains the
 mobile pairing private-network origin rules; direct HTTPS accepts a reachable
 DNS or IP origin, including IPv6. Origins contain no credentials, path, query or
-fragment. Port range is 1–65535. Clients report unsupported
+fragment. IPv4 uses canonical dotted-decimal spelling; malformed numeric hosts
+and legacy numeric spellings are rejected before an invitation is created.
+Port range is 1–65535. Clients report unsupported
 transports locally: Playdate supports DNS/IPv4 and HTTP inside its native
 tailnet stream; the native phone app also supports IPv6 and HTTPS over Tailscale.
 
@@ -85,8 +97,9 @@ Content-Type: application/json
 {"invitation":"<48 lowercase hex>","publicKey":"<64 lowercase hex>","client":"My device"}
 ```
 
-This route accepts at most 1024 request bytes, rejects unknown fields or trailing
-JSON, requires JSON content type, rejects browser Origin headers, allows only
+This route accepts at most 1024 request bytes within five seconds. An unfinished
+body times out with HTTP 408 and closes the connection. It rejects unknown fields
+or trailing JSON, requires JSON content type, rejects browser Origin headers, allows only
 POST, and does not enable CORS. It is excluded from optional inbound request
 recording so invitation capabilities cannot enter HTTP recordings. Other Hub
 routes retain their authentication guard.
@@ -106,7 +119,8 @@ clients can retry an already registered key even at capacity. Repeated claims
 with the same key recover the same comparison and, after approval, the exact
 same ciphertext until expiry. Reading the result does not consume it: a lost
 HTTP reply must not strand an approved client. Responses use `Cache-Control:
-no-store`. Devices poll no faster than once per second and bound request time;
+no-store`. Devices accept at most 4096 response bytes, cancel oversized replies
+while reading, poll no faster than once per second, and bound request time;
 network failures preserve the pending key for retry. Cancellation stops polling
 and clears the ephemeral key; it never deletes a saved Hub or draft.
 
@@ -116,9 +130,14 @@ The code is SHA-512 over these concatenated bytes:
 2. The 24 raw invitation bytes.
 3. The client's 32 raw X25519 public key bytes.
 
-Interpret the first three digest bytes as an unsigned big-endian integer,
-reduce modulo 1,000,000, and display as six zero-padded decimal digits. Clients
-must not substitute a code supplied by a network response for their own result.
+Encode the first 16 digest bytes as 32 lowercase hexadecimal digits, grouped in
+eight groups of four separated by hyphens, for example
+`2be9-271d-6222-d455-d2d1-c217-62b2-3b82`. Display and compare every group. The
+128-bit fingerprint resists offline searches for a key matching an observed
+claim; a short decimal reduction does not. The Hub refuses approval when two
+distinct claims have the same fingerprint, and the operator starts a new
+invitation. Clients must not substitute a fingerprint supplied by a network
+response for their own result.
 
 ## Invitation bytes (EVI1)
 
@@ -191,3 +210,22 @@ CRC covers its first 55 bytes. Twelve silent symbols separate frames. Complete
 messages require every fragment and a matching message CRC. Replaying the same
 invitation fills missing fragments; a different length or message CRC resets
 the assembly. Frame checksums detect corruption, not malicious senders.
+
+## Cross-client qualification
+
+The Playdate implementation lives in
+[evener-client-playdate](https://github.com/prime-radiant-inc/evener-client-playdate).
+For the optional acoustic C/browser check and the full isolated-Hub pairing
+check, set `EVENER_PLAYDATE_CLIENT` to that checkout's absolute path and
+`PLAYDATE_SDK_PATH` to the SDK directory:
+
+```sh
+# From cmd/evener-hub/frontend:
+node scripts/check-playdate-pairing.mjs
+
+# From the Evener repository root:
+EVENER_PAIRING_E2E=1 go test ./cmd/evener-hub -run TestDevicePairingBrowserRoundTrip -v
+```
+
+These checks use synthetic credentials and an isolated local Hub. Ordinary
+Evener tests do not require the standalone client or Playdate SDK.

@@ -40,7 +40,7 @@ and [physical qualification report](docs/qualification/2026-10-10-native-client.
   conversation until its replacement arrives.
 - **Network:** the system menu's Network option offers Reconnect, Receive setup,
   Tailscale sign-in and Change tailnet. Receive setup listens for a Hub invitation
-  played by the Web UI's Pair a device screen. Approve the matching six-digit code
+  played by the Web UI's Pair a device screen. Approve the matching fingerprint
   in that browser, then press A on the Playdate to save, or B to cancel. Change tailnet asks
   before creating a new native identity and keeps saved messages and drafts.
 
@@ -50,10 +50,10 @@ this client's scope. Use another Evener client for those interactions.
 
 ## Configure and build
 
-Acoustic setup requires a Hub with the shared device-pairing API and Web UI.
-That integration remains in the Evener development branch; this repository
-does not deploy it. For a Hub without that feature, use the baked-in destination
-configuration below. Ordinary session browsing and voice use the existing Hub API.
+Acoustic setup requires a Hub with the shared device-pairing API and Web UI,
+maintained in the Evener repository. For a Hub without that feature, use the
+baked-in destination configuration below. Ordinary session browsing and voice
+use the existing Hub API.
 
 Install Playdate SDK 3.1.2 and a full ARM GNU toolchain with newlib. Node 22+
 is needed only to generate the private configuration.
@@ -78,7 +78,7 @@ missing, replay the same sound. The browser needs no microphone or camera and
 works on HTTP over the tailnet.
 
 The invitation supplies the address and a short-lived secret. The Playdate
-contacts that Hub with its own temporary key. Compare the six-digit codes and
+contacts that Hub with its own temporary key. Compare the fingerprints and
 approve that device in the browser. The Hub returns the credential encrypted to
 the approved key; press A on the Playdate to save the reviewed destination.
 The [shared protocol reference](docs/device-pairing.md) also supplies QR invitations
@@ -274,7 +274,7 @@ build/check/network-socket
 ```
 
 The cross-client acoustic checks live with the shared pairing implementation in
-Evener. With its pairing development branch checked out and frontend dependencies
+Evener. With its shared pairing implementation checked out and frontend dependencies
 installed, point that checkout at this client explicitly:
 
 ```sh

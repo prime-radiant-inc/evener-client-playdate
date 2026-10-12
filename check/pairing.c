@@ -41,11 +41,11 @@ int main(int argc, char **argv) {
         }
     }
     if (!strcmp(argv[1], "open-invitation") || !strcmp(argv[1], "decode-invitation")) {
-        PairingInvitation invitation; char public_hex[65]; unsigned comparison;
+        PairingInvitation invitation; char public_hex[65], comparison[PAIRING_COMPARISON_SIZE];
         if (!pairing_invitation(decoder.bytes, decoder.length, &invitation)) return 1;
-        pairing_claim_key(&invitation, secret, public_hex, &comparison);
+        pairing_claim_key(&invitation, secret, public_hex, comparison);
         PairingSettings *s = &invitation.destination;
-        printf("%s %u %s %u %u %06u %s ", s->host, s->port, s->path, s->tailnet, s->tls, comparison, public_hex);
+        printf("%s %u %s %u %u %s %s ", s->host, s->port, s->path, s->tailnet, s->tls, comparison, public_hex);
         for (unsigned i = 0; i < 24; i++) printf("%02x", invitation.secret[i]);
         puts(""); return 0;
     }
