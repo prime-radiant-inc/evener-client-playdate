@@ -40,7 +40,7 @@ and [physical qualification report](docs/qualification/2026-10-10-native-client.
   conversation until its replacement arrives.
 - **Network:** the system menu's Network option offers Reconnect, Receive setup,
   Tailscale sign-in and Change tailnet. Receive setup listens for a Hub invitation
-  played by the Web UI's Pair a device screen. Approve the matching fingerprint
+  played by the Web UI's Pair using sound screen. Approve the matching fingerprint
   in that browser, then press A on the Playdate to save, or B to cancel. Change tailnet asks
   before creating a new native identity and keeps saved messages and drafts.
 
@@ -72,7 +72,7 @@ make
 The environment file supplies `OPENAI_API_KEY`. The generator creates a unique
 private entropy seed and omits Hub and tailnet credentials. On first launch,
 the device listens for setup sound. In the authenticated Web UI, open **Settings →
-Mobile app → Pair a device**, select the Hub address and Tailscale or direct
+Mobile app → Pair using sound**, select the Hub address and Tailscale or direct
 Wi-Fi, create an invitation and play its sound near the device. If fragments are
 missing, replay the same sound. The browser needs no microphone or camera and
 works on HTTP over the tailnet.

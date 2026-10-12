@@ -64,7 +64,7 @@ static void listen(void) {
     }
     audio_reset(&audio);
     listening = pd->sound->setMicCallback(microphone, NULL, kMicInputInternal) != 0;
-    snprintf(status, sizeof(status), "%s", listening ? "Listening for setup sound..." : "Microphone unavailable. Press A to retry.");
+    snprintf(status, sizeof(status), "%s", listening ? "Listening..." : "Microphone unavailable.");
 }
 bool pairing_begin(void) {
     if (asking || !settings_cancel_pending()) return false;
@@ -76,6 +76,7 @@ bool pairing_begin(void) {
     listen(); return true;
 }
 bool pairing_active(void) { return active; }
+bool pairing_ready_to_save(void) { return active && review; }
 void pairing_pause(void) {
     paused = true; stop_mic(); pairing_http_stop(); tailnet_device_stop();
 }
@@ -110,7 +111,7 @@ enum PairingResult pairing_update(PDButtons pressed) {
     if (review) {
         if (pressed & kButtonA) {
             if (settings_save(&candidate)) { finish(); return PAIRING_APPLIED; }
-            snprintf(status, sizeof(status), "Could not save setup. Press A to retry, or B to cancel.");
+            snprintf(status, sizeof(status), "Could not save this Hub. Try saving again.");
         }
         return PAIRING_RUNNING;
     }
@@ -122,7 +123,7 @@ enum PairingResult pairing_update(PDButtons pressed) {
         if (result == PAIRING_HTTP_APPROVED) {
             if (pairing_approved(envelope, length, &invitation, secret, &candidate)) {
                 review = true; pairing_http_stop(); tailnet_device_stop();
-                snprintf(status, sizeof(status), "Approved by your Hub. Press A to save this destination.");
+                status[0] = 0;
             } else end_attempt("Could not verify approval. Create a new invitation and retry.");
             memset(envelope, 0, sizeof(envelope));
         } else if (result == PAIRING_HTTP_ENDED) {
@@ -165,28 +166,43 @@ static void text(const char *value, int x, int y, int width, int height) {
 }
 void pairing_draw(LCDFont *font) {
     pd->graphics->clear(kColorWhite); pd->graphics->setFont(font);
+    const char *auth = received_invitation && config.use_tailnet && !review && !terminal ? tailnet_device_auth_url() : "";
+    const char *title = "Receive setup";
+    if (review) title = "Hub approved";
+    else if (auth[0]) title = "Join your Hub's tailnet";
+    else if (received_invitation && !terminal) title = "Pair with Hub";
     pd->graphics->fillRect(0, 0, 400, 21, kColorBlack);
     pd->graphics->setDrawMode(kDrawModeFillWhite);
-    text(review ? "Save Evener setup" : "Receive setup", 8, 4, 384, 16);
+    text(title, 8, 4, 384, 16);
     pd->graphics->setDrawMode(kDrawModeCopy);
     char summary[384];
     if (received_invitation && !terminal) {
-        const char *auth = config.use_tailnet && !review ? tailnet_device_auth_url() : "";
         if (auth[0] && pairing_draw_qr(auth, 5, 31, 184)) {
-            snprintf(summary, sizeof(summary), "Sign in to Tailscale\n\n%s\n\nThen return to compare the Hub code.", auth);
-            text(summary, 199, 36, 193, 157);
+            text("Scan with your phone.\n\nSign in to Tailscale and choose the tailnet with your Hub.\n\nThis screen updates automatically.", 199, 36, 193, 170);
             text("B Cancel", 8, 223, 384, 16);
             return;
         }
-        snprintf(summary, sizeof(summary), "%s:%u\n%s\n\nCompare code:\n%.19s\n%s", invitation.destination.host, invitation.destination.port,
-            invitation.destination.tailnet ? "Tailscale" : invitation.destination.tls ? "Wi-Fi with TLS" : "Wi-Fi", comparison, comparison + 20);
-        text(summary, 12, 38, 376, 110);
-        text(status, 12, 159, 376, 55);
-        text(review ? "A Save setup    B Cancel" : "B Cancel    Approve in browser", 8, 223, 384, 16);
+        snprintf(summary, sizeof(summary), "%s:%u\n%s", invitation.destination.host, invitation.destination.port,
+            invitation.destination.tailnet ? "Tailscale" : invitation.destination.tls ? "Wi-Fi with TLS" : "Wi-Fi");
+        text(summary, 12, 34, 376, review ? 110 : 38);
+        if (!review) {
+            text("Compare all four lines in your browser:", 12, 78, 376, 20);
+            for (int row = 0; row < 4; row++) {
+                snprintf(summary, sizeof(summary), "%.4s  %.4s", comparison + row * 10, comparison + row * 10 + 5);
+                text(summary, 24, 103 + row * 19, 352, 19);
+            }
+        }
+        text(status, 12, review ? 153 : 187, 376, review ? 62 : 31);
+        text(review ? "A Save and connect    B Cancel" : "B Cancel", 8, 223, 384, 16);
     } else {
-        snprintf(summary, sizeof(summary), "In Evener Settings, choose Pair a device.\n\nCreate an invitation and play its setup sound near this Playdate.\n\nReceived: %u%%", chirp_progress(&decoder));
-        text(summary, 12, 36, 376, 130);
-        text(status, 12, 172, 376, 44);
-        text(terminal ? "A Listen again    B Cancel" : "B Cancel    A Retry microphone", 8, 223, 384, 16);
+        if (!terminal) {
+            snprintf(summary, sizeof(summary), "In Evener: Settings > Mobile app > Pair using sound.\n\nPlay the setup sound near this Playdate.\n\nReceived: %u%%", chirp_progress(&decoder));
+            text(summary, 12, 36, 376, 130);
+        }
+        text(status, 12, terminal ? 36 : 172, 376, terminal ? 175 : 44);
+        const char *actions = "B Cancel";
+        if (terminal) actions = "A Listen again    B Cancel";
+        else if (!listening) actions = "A Retry microphone    B Cancel";
+        text(actions, 8, 223, 384, 16);
     }
 }

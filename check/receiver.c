@@ -9,15 +9,13 @@
 
 void check_network_start(const char *endpoint);
 extern unsigned network_opens;
-static bool reviewing;
 void random_fill(uint8_t *bytes, size_t count) { memset(bytes, 0x3a, count); }
-static void clear(LCDColor color) { (void)color; reviewing = false; }
+static void clear(LCDColor color) { (void)color; }
 static void font(LCDFont *value) { (void)value; }
 static LCDBitmapDrawMode mode(LCDBitmapDrawMode value) { return value; }
 static void rect(int x, int y, int w, int h, LCDColor color) { (void)x; (void)y; (void)w; (void)h; (void)color; }
 static void draw(const void *text, size_t len, PDStringEncoding encoding, int x, int y, int w, int h, PDTextWrappingMode wrap, PDTextAlignment align) {
-    (void)len; (void)encoding; (void)x; (void)y; (void)w; (void)h; (void)wrap; (void)align;
-    if (!strcmp(text, "Save Evener setup")) reviewing = true;
+    (void)text; (void)len; (void)encoding; (void)x; (void)y; (void)w; (void)h; (void)wrap; (void)align;
 }
 static struct playdate_graphics graphics = {.clear = clear, .setFont = font, .setDrawMode = mode, .fillRect = rect, .drawTextInRect = draw};
 static void receive(FILE *pcm) {
@@ -35,7 +33,7 @@ static void wait_for_review(void) {
     for (unsigned i = 0; i < 4500; i++) {
         CHECK(pairing_update(0) == PAIRING_RUNNING);
         pairing_draw(NULL);
-        if (reviewing) { CHECK(!config.hub_token[0]); return; }
+        if (pairing_ready_to_save()) { CHECK(!config.hub_token[0]); return; }
         fixture_time += 0.01f; usleep(10000);
     }
     CHECK(!"Timed out waiting for Hub approval");

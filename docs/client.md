@@ -10,7 +10,7 @@ ongoing Mac helper.
 
 ## Setup and saved destinations
 
-An authenticated browser opens **Settings → Mobile app → Pair a device** and
+An authenticated browser opens **Settings → Mobile app → Pair using sound** and
 creates an invitation for the desired Hub and connection type. The device's
 system menu exposes **Network → Receive setup**; an unconfigured build opens it
 on launch. The browser plays the shared [device invitation](device-pairing.md)
@@ -19,8 +19,9 @@ Hub credential. The microphone queues PCM; the game loop decodes and verifies
 complete fragments. Repeated playback repairs missing fragments.
 
 The device generates an ephemeral key and contacts the advertised Hub. Both
-screens independently show the same 128-bit comparison fingerprint (eight groups of four hex digits). After the person
-approves that exact code in the authenticated browser, the Hub releases the
+screens independently show the same 128-bit comparison fingerprint as four lines
+of two four-digit hex groups. After the person approves that exact code in the
+authenticated browser, the Hub releases the
 credential encrypted to that device key. The Playdate verifies the envelope and
 its destination, then offers A to save the reviewed settings. B cancels without
 changing saved settings or drafts. A network interruption retries with the same
