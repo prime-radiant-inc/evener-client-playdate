@@ -1,7 +1,7 @@
 # Playdate client
 
 The [native Playdate client](../README.md) provides
-session navigation, chat transcripts and reviewed voice input. It is a private
+session navigation, chat transcripts and reviewed voice input. It is a
 C client using the existing [AppWire protocol](https://github.com/prime-radiant-inc/evener/blob/main/docs/appwire-protocol.md). It
 connects to the Hub through its native Tailscale DERP/WireGuard byte stream and
 to OpenAI through a separate SDK TLS connection for transcription. The device

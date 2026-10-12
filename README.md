@@ -1,6 +1,6 @@
 # Evener for Playdate
 
-A private native C client for Playdate SDK 3.1.2. It connects directly to an
+A native C client for Playdate SDK 3.1.2. It connects directly to an
 Evener Hub over AppWire v7 through its own Tailscale DERP/WireGuard connection,
 and to OpenAI Realtime transcription over SDK TLS. Native control-plane
 maintenance refreshes the enrolled identity and selected Hub peer. Runtime
