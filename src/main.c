@@ -30,6 +30,8 @@ static char error[256];
 static PDMenuItem *network_menu;
 static enum Screen before_pairing;
 static bool seed_ready, setup_requested, change_tailnet;
+static float network_restart_at;
+static bool network_restarting;
 
 static bool read_configuration(void) {
     static char bytes[4096];
@@ -57,6 +59,7 @@ static bool read_configuration(void) {
 }
 static void permission(bool allowed, void *context) {
     (void)context;
+    if (network_restarting) return;
     permission_pending = false;
     if (allowed) permission_step++;
     else snprintf(error, sizeof(error), "Access denied. Allow permissions in Settings, then reopen Evener.");
@@ -72,7 +75,7 @@ static void reset_profile(void) {
 static void refresh_saved_audio(void) { saved_audio = recording_exists(draft.ref); }
 static void discard(void *context) {
     (void)context;
-    if (pairing_active()) return;
+    if (network_restarting || pairing_active()) return;
     if (draft.state == DRAFT_SENDING || draft.state == DRAFT_UNCERTAIN) {
         snprintf(hub_status, sizeof(hub_status), "Delivery is being checked. Draft kept.");
         return;
@@ -88,7 +91,7 @@ static void discard(void *context) {
 static bool save_voice(void);
 static void latest(void *context) {
     (void)context;
-    if (pairing_active()) return;
+    if (network_restarting || pairing_active()) return;
     if (selected_ref[0]) {
         if (recording_started) {
             voice_finish();
@@ -118,6 +121,7 @@ static void receive_setup(void) {
 }
 static void network_action(void *context) {
     (void)context;
+    if (network_restarting) return;
     int choice = pd->system->getMenuItemValue(network_menu);
     pd->system->setMenuItemValue(network_menu, 0);
     if (choice == 1) receive_setup();
@@ -161,6 +165,69 @@ static bool save_voice(void) {
     if (complete) voice_saved();
     refresh_saved_audio();
     return true;
+}
+static void restore_network_context(void) {
+    const char *args = pd->system->getLaunchArgs(NULL);
+    Json j;
+    if (!args || strlen(args) > 10000 || !json_parse(&j, args, strlen(args))) return;
+    static NavigationRow row;
+    static char project[REF_CAPACITY], title[160], snapshot[128];
+    int view = json_int(&j, json_get(&j, 0, "screen"));
+    int kind = json_int(&j, json_get(&j, 0, "browse"));
+    int tier = json_int(&j, json_get(&j, 0, "tier"));
+    int offset = json_int(&j, json_get(&j, 0, "offset"));
+    int picked = json_int(&j, json_get(&j, 0, "selection"));
+    int position = json_int(&j, json_get(&j, 0, "scroll"));
+    bool valid = json_is(&j, json_get(&j, 0, "networkRecovery"), "1") &&
+        view >= SCREEN_SESSIONS && view <= SCREEN_AUTH && kind >= BROWSE_LIVE && kind <= BROWSE_PROJECT &&
+        tier >= 0 && tier <= 2 && offset >= 0 && picked >= 0 && picked <= NAV_PAGE_SIZE && position >= 0 &&
+        json_field(&j, 0, "ref", row.ref, sizeof(row.ref)) &&
+        json_field(&j, 0, "title", row.title, sizeof(row.title)) &&
+        json_field(&j, 0, "project", project, sizeof(project)) &&
+        json_field(&j, 0, "projectTitle", title, sizeof(title)) &&
+        json_field(&j, 0, "snapshot", snapshot, sizeof(snapshot));
+    bool resume_send = json_is(&j, json_get(&j, 0, "send"), "true");
+    bool resume_follow = json_is(&j, json_get(&j, 0, "follow"), "true");
+    json_free(&j);
+    if (!valid) return;
+    hub_browse(kind, project, title, tier, offset);
+    if (row.ref[0] && !hub_restore_view(&row, snapshot)) return;
+    if ((view == SCREEN_TRANSCRIPT || view == SCREEN_COMPOSER) && !row.ref[0]) return;
+    screen = view; selection = picked; scroll = position; follow = resume_follow;
+    if (screen == SCREEN_COMPOSER) recording_started = voice_recover() && voice_state != VOICE_ERROR;
+    refresh_saved_audio();
+    // An already dispatched mutation keeps its persisted identity and reconciles
+    // through the authoritative thread read. Only a pre-dispatch request needs
+    // its in-memory send intent restored here.
+    if (resume_send) hub_send();
+    app_log("Network recovery restored view %d; selected %d; draft %d", screen, row.ref[0] != 0, draft.state);
+}
+static void recover_network(void) {
+    if (!net_recovery_needed() || app_time() < network_restart_at || pairing_active() || change_tailnet ||
+        voice_state == VOICE_RECORDING || !voice_audio_saved()) return;
+    // Keep the SDK's existing two TLS slots: DERP and transcription. Relaunch
+    // clears a blocked SDK worker without recycling an object it still owns.
+    static char ref[REF_CAPACITY * 6 + 3], title[160 * 6 + 3];
+    static char project[REF_CAPACITY * 6 + 3], project_title[160 * 6 + 3], args[10000];
+    static char snapshot[128], quoted_snapshot[128 * 6 + 3];
+    network_restart_at = app_time() + 1;
+    if (!hub_save_view(snapshot, sizeof(snapshot)) || !json_quote(snapshot, quoted_snapshot, sizeof(quoted_snapshot))) return;
+    if (!json_quote(selected_ref, ref, sizeof(ref)) || !json_quote(selected_title, title, sizeof(title)) ||
+        !json_quote(browse_project, project, sizeof(project)) || !json_quote(browse_title, project_title, sizeof(project_title))) return;
+    int length = snprintf(args, sizeof(args),
+        "{\"networkRecovery\":1,\"screen\":%d,\"ref\":%s,\"title\":%s,\"browse\":%d,\"project\":%s,"
+        "\"projectTitle\":%s,\"snapshot\":%s,\"tier\":%d,\"offset\":%d,\"selection\":%d,\"scroll\":%d,\"follow\":%s,\"send\":%s}",
+        screen, ref, title, browse_kind, project, project_title, quoted_snapshot, browse_tier, navigation_offset, selection,
+        scroll > 0 ? scroll : 0, follow ? "true" : "false", hub_send_pending() ? "true" : "false");
+    if (length < 0 || length >= sizeof(args)) return;
+    if (recording_started && !save_voice()) return;
+    if ((!recording_started && draft.ref[0] && !draft_save()) || !voice_prepare_restart()) {
+        snprintf(hub_status, sizeof(hub_status), "Saving your work before reconnecting..."); return;
+    }
+    recording_started = false;
+    network_restarting = true;
+    app_log("Network recovery restarting app after SDK cleanup stalled");
+    pd->system->restartGame(args);
 }
 static void compose(void) {
     screen = SCREEN_COMPOSER; reset_scroll(); recording_started = final_saved = false;
@@ -312,6 +379,7 @@ static void draw(void) {
 }
 static int update(void *context) {
     (void)context;
+    if (network_restarting) return 0;
     PDButtons held, pressed, released;
     pd->system->getButtonState(&held, &pressed, &released);
     if (pairing_active()) {
@@ -372,7 +440,7 @@ static int update(void *context) {
             if ((pressed & kButtonB) || hub_ready) screen = SCREEN_SESSIONS;
             else {
                 if (pressed & kButtonA) reconnect(NULL);
-                draw_authorization(); return 1;
+                recover_network(); draw_authorization(); return 1;
             }
         }
         if ((pressed & kButtonA) && (screen == SCREEN_TRANSCRIPT ||
@@ -388,6 +456,12 @@ static int update(void *context) {
         if (screen == SCREEN_SESSIONS && selection < navigation_count)
             memcpy(focused, navigation[selection].ref, sizeof(focused));
         int nav_revision = navigation_revision;
+        const char *anchor = "";
+        if (screen == SCREEN_TRANSCRIPT && !follow)
+            for (int i = 0; i < measured_count; i++) if (row_y[i] + row_height[i] > scroll) {
+                anchor = measured_keys[i]; break;
+            }
+        hub_set_reading_anchor(anchor);
         enum DraftState before = draft.state;
         if (config.use_tailnet) {
             tailnet_device_set_voice_active(voice_state == VOICE_RECORDING || voice_state == VOICE_FINISHING);
@@ -468,6 +542,7 @@ static int update(void *context) {
             if (screen == SCREEN_TRANSCRIPT && scroll >= content_height - CONTENT_HEIGHT && (move > 0 || (direction & kButtonDown))) follow = true;
         }
     }
+    recover_network();
     draw();
     return 1;
 }
@@ -476,6 +551,9 @@ __declspec(dllexport)
 #endif
 int eventHandler(PlaydateAPI *playdate, PDSystemEvent event, uint32_t arg) {
     (void)arg;
+    // The SDK owns teardown once a runtime restart is requested. Normal
+    // shutdown would enqueue more TCP work against the runtime being removed.
+    if (network_restarting) return 0;
     if (pd && (event == kEventLock || event == kEventPause || event == kEventTerminate ||
         event == kEventResume || event == kEventUnlock))
         app_log("Application lifecycle event %u at %.2f seconds", (unsigned)event, (double)app_time());
@@ -491,7 +569,11 @@ int eventHandler(PlaydateAPI *playdate, PDSystemEvent event, uint32_t arg) {
         static const char *network_options[] = {"Reconnect", "Receive setup", "Tailscale sign-in", "Change tailnet"};
         network_menu = pd->system->addOptionsMenuItem("Network", network_options, 4, network_action, NULL);
         if (!read_configuration()) snprintf(error, sizeof(error), "Device configuration is missing or could not be read.");
-        else setup_requested = !settings_ready();
+        else {
+            setup_requested = !settings_ready();
+            if (!setup_requested) restore_network_context();
+        }
+        network_restart_at = app_time() + 60;
     } else if (event == kEventLock || event == kEventPause || event == kEventTerminate) {
         if (pairing_active()) pairing_pause();
         if (recording_started) save_voice();

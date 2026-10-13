@@ -150,6 +150,17 @@ void voice_close(void) {
     ws_close(&socket); retry_pending = false;
     voice_state = VOICE_OFF;
 }
+bool voice_audio_saved(void) {
+    return !active || (!storage_failed && !pending_count &&
+        atomic_load(&audio.written) == atomic_load(&audio.read));
+}
+bool voice_prepare_restart(void) {
+    if (voice_state == VOICE_RECORDING || !voice_audio_saved()) return false;
+    stop_capture();
+    if (!recording_flush()) return false;
+    recording_close();
+    return true;
+}
 bool voice_terminate(void) {
     if (voice_state == VOICE_RECORDING) voice_finish();
     stop_capture();

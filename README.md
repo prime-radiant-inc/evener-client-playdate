@@ -160,8 +160,19 @@ build writes `.su` stack-usage reports and rejects individual frames above
   because the SDK stores one global callback. This also retires a timed-out
   open whose command finished without delivering its own callback. Remote EOF
   keeps the same ownership protections. A worker that never reaches the fence
-  still cannot be cancelled through this queued API; the retained handle and
-  local input remain intact while it waits.
+  still cannot be cancelled through this queued API. After thirty seconds of
+  stalled retirement, the experimental fallback saves the current draft and
+  restarts its runtime,
+  retaining the selected view and pending send intent. Relaunch is spaced at
+  least sixty seconds apart, waits for active recording to stop and audio to
+  finish saving, and never bypasses a failed save. Existing mutation identities
+  reconcile through a fresh Hub read. The fallback uses no additional socket:
+  DERP and direct transcription retain one TLS slot each. Acoustic pairing and
+  identity replacement are not automatically restarted. Repeated stalled-worker
+  recovery has failed in a standalone SDK probe with firmware allocator faults.
+  The fallback remains experimental and cannot guarantee recovery; see the
+  [SDK reproductions](docs/qualification/sdk-network-report.md) and
+  [client hardware evidence](docs/qualification/2026-10-13-runtime-recovery.md).
   Queued admission does not consume connection deadlines.
   `random.c` combines a private build seed with a durably advanced launch counter
   to supply cryptographic nonces across relaunches.
@@ -271,6 +282,10 @@ build/check/storage
 # SDK ownership and write-progress qualification, without network access:
 make -f check/Makefile build/check/network-socket
 build/check/network-socket
+
+# Saved transcript window and authoritative refresh, without network access:
+make -f check/Makefile build/check/hub-recovery
+build/check/hub-recovery
 ```
 
 The cross-client acoustic checks live with the shared pairing implementation in

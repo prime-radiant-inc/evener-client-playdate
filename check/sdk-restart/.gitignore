@@ -1,0 +1,4 @@
+build/
+*.pdx/
+Source/pdex.*
+__pycache__/

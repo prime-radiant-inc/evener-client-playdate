@@ -1,0 +1,6 @@
+name=TCP Restart Probe
+author=Prime Radiant
+description=Direct SDK TCP callback lifetime diagnostic.
+bundleID=com.primeradiant.diagnostic.tcprestart
+version=0.1.0
+buildNumber=1

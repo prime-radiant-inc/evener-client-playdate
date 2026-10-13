@@ -198,6 +198,15 @@ void net_close(NetSocket *s) {
     net_tick();
 }
 bool net_waiting(const NetSocket *s) { return s && s->queued && !s->retired; }
+bool net_recovery_needed(void) {
+    for (unsigned i = 0; i < sizeof(sockets) / sizeof(sockets[0]); i++) {
+        const NetSocket *s = &sockets[i];
+        // Allow the SDK's 20-second connect deadline and normal worker cleanup.
+        // A retained handle must not be closed or freed to force recovery.
+        if (s->retired && s->connection && app_time() - s->retired_at >= 30) return true;
+    }
+    return false;
+}
 bool net_idle(void) {
     for (unsigned i = 0; i < sizeof(sockets) / sizeof(sockets[0]); i++)
         if (sockets[i].connection || sockets[i].queued || sockets[i].state != NS_CLOSED) return false;
