@@ -56,11 +56,22 @@ restart addresses a concrete ownership interaction. One successful natural resta
 and subsequent voice/send cycles support that change, but do not qualify repeated
 stalled-worker restarts or prove the origin of the earlier allocator corruption.
 
-USB disappeared before the final crash-log read and diagnostic-app cleanup. The
-captured sequences contain no observed reboot, but the post-run crash log has not
-yet been checked. The candidate remains installed; temporary diagnostic bundles
-remain until that cleanup can be completed. The pull request remains a draft
-pending this final device check and stronger repeated-recovery evidence.
+The pull request remains a draft pending stronger repeated-recovery evidence.
+
+## Final device check
+
+After USB reconnected, the post-run crash and error logs were byte-identical to
+the pre-run copies (6,880 and 814 bytes respectively). Neither recorded a new
+entry during the qualification sequences. The latest 62 saved-data files were
+backed up with matching hashes. Removing the temporary `RawTCP` and
+`NetworkInspect` diagnostic bundles left those saved files and the installed
+Evener executable unchanged.
+
+After safe ejection, Evener completed native control, DERP, WireGuard and Hub
+connection and returned to its normal connected session list. The revised
+candidate remains installed with the current pairing, drafts, recordings and
+cache preserved. No client source, Hub/server, radio configuration or firmware
+changed during this final check.
 
 Private saved-data backups, configured binaries and raw captures stay outside
 Git. Host storage/socket/recovery checks and ARM/Simulator build evidence are
