@@ -45,8 +45,8 @@ pending-write failure. A passing probe alone would not qualify DERP or voice.
 
 Both ARM and macOS Simulator targets compile. After removable-volume access
 became available, all 65 current Evener data files were backed up and
-hash-verified. Only the standalone probe bundle was installed; all backed-up
-Evener data remained unchanged.
+hash-verified. Installing the standalone probe did not change any backed-up
+Evener data.
 
 | Physical run | Device verified receive | Mac verified receipts | Outcome |
 | --- | ---: | ---: | --- |
@@ -82,6 +82,46 @@ callback, reported active receive mode (`CIPRECVMODE:0`) and no receive length
 (`CIPRECVLEN:-1`). Their timing cannot establish where bytes were held during
 the stall. No radio configuration was changed.
 
+## Native receive-window comparison
+
+An executable-only install changed the native client's receive window from
+16384 to 1200 bytes, matching its 1200-byte MSS. All 65 saved-data files were
+hash-verified unchanged at installation; the installed private bundle was backed
+up separately. Credentials and saved work were not reset.
+
+The first connection authenticated control, DERP and WireGuard and initialized
+AppWire, but did not complete its conversation read. The SDK stalled with 13
+pending bytes after 1944 received bytes, reported no SDK error and did not reach
+the close fence. Automatic runtime recovery then reopened the same view. Later
+connections read eleven chat messages and completed two routine control refreshes,
+with about 135 KB and 120 KB received on those DERP connections. These partial
+successes do not erase the initial failure. No voice or send test was performed.
+
+A header-only capture on the Hub showed that the 1200-byte window admitted pairs
+of 600-byte segments. The client sometimes replenished capacity after only one
+of the pair, so traffic remained pipelined. The Hub runs Linux 6.8; upstream
+[`tcp_bound_to_half_wnd`](https://github.com/torvalds/linux/blob/v6.8/include/net/tcp.h)
+explains the half-window packetization. It does not halve windows at or below
+`TCP_MSS_DEFAULT` (536 bytes for IPv4). A matching 512-byte MSS and receive window
+is therefore the next isolated candidate, subject to an actual packet capture
+and repeated native-client, voice and delivery checks. Both targets compile.
+This candidate has not been installed or qualified on hardware.
+
+## Display and restart boundary
+
+Jesse reported visual flashing during the native observation. Three passive
+screen captures four seconds apart were pixel-identical and did not reproduce
+it. USB disappeared and returned during diagnosis; that alone does not establish
+a restart or the cause of the flashing.
+
+Code inspection found that the same update which requested `restartGame` still
+called its draw routine and returned a display-update result. The current source
+returns zero immediately from both restart call sites. Later callbacks retain
+their existing guard. ARM and Simulator builds and the existing storage,
+socket-ownership and Hub-recovery checks passed. This correction has not yet
+been installed or physically qualified, and is not evidence that the SDK worker
+stall or reported flicker is fixed. USB became unavailable before installation.
+
 ## Firmware boundary
 
 The [public SDK changelog](https://sdk.play.date/changelog/) lists 3.1.2 as the
@@ -90,7 +130,7 @@ establish a repair for this TCP failure. The radio notification issue cited in
 the earlier report remains a hypothesis; neither the private radio implementation
 nor the origin of the stalled worker has been established.
 
-No firmware image, radio configuration, protected flash, production Hub or
-Tailscale identity was changed. The production client's restart behavior is
-unchanged. It remains experimental and does not satisfy repeated end-to-end
-recovery qualification.
+No firmware image, radio configuration, protected flash or production Hub was
+changed. The device retains its enrolled Tailscale identity. Its SDK runtime
+recovery remains experimental and does not satisfy repeated end-to-end recovery
+qualification.
