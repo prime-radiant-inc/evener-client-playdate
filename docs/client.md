@@ -187,9 +187,10 @@ establishes completion. A timed-out open can retire even when its own callback
 was omitted, once the worker confirms completion. If the SDK worker itself stops
 processing commands, the queued API cannot cancel it. The experimental runtime
 recovery fallback waits thirty seconds after stalled retirement, saves work and
-calls the SDK's runtime restart. Its production lifecycle remains unqualified:
-an initial hardware run recovered successfully, but a later restart faulted in
-the firmware allocator. See the [qualification record](qualification/2026-10-12-sdk-tcp.md#runtime-recovery-integration).
+calls the SDK's runtime restart. Repeated recovery from stalled SDK workers
+remains under qualification; the SDK's teardown can encounter a firmware allocator
+fault. See the [qualification record](qualification/2026-10-13-runtime-recovery.md)
+for exercised recovery and voice-delivery boundaries.
 It restores the current conversation or navigation page, scroll/follow state
 and composer. A send requested before dispatch resumes preparation; a dispatched
 send retains its durable mutation identity and requires the existing
