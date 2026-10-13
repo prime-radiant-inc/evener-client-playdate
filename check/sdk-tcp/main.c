@@ -149,11 +149,14 @@ static void pump(void) {
         last_read = time;
         if (received > TOTAL) { finish(false, "Excess input"); return; }
     }
-    unsigned expected_writes = lockstep ? (TOTAL + LOCKSTEP_BYTES - 1) / LOCKSTEP_BYTES :
-        download_only ? 1u : RECEIPTS;
-    unsigned receipt_after = (writes + 1) * LOCKSTEP_BYTES;
-    if (receipt_after > TOTAL) receipt_after = TOTAL;
-    bool receipt_ready = lockstep ? received >= receipt_after : !download_only || received == TOTAL;
+    unsigned expected_writes = download_only ? 1u : RECEIPTS;
+    bool receipt_ready = !download_only || received == TOTAL;
+    if (lockstep) {
+        expected_writes = (TOTAL + LOCKSTEP_BYTES - 1) / LOCKSTEP_BYTES;
+        unsigned receipt_after = (writes + 1) * LOCKSTEP_BYTES;
+        if (receipt_after > TOTAL) receipt_after = TOTAL;
+        receipt_ready = received >= receipt_after;
+    }
     if (receipt_ready && writes < expected_writes
             && tcp->getSentBytesPending(outbound()) == 0) {
         int written = tcp->write(outbound(), receipt, sizeof(receipt));

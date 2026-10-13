@@ -141,11 +141,68 @@ bytes. Reading only 32 bytes of a full window advertises exactly 32; consuming
 the remaining 480 restores 512. Empty reads produce no packet. Assertion checks
 remain enabled independently of the crypto build's `NDEBUG` flag.
 
-Both ARM and Simulator targets build with this correction. It has not yet been
-installed: the device again disappeared from USB after the 512-byte run.
-The packet check establishes the receive-credit behavior only. A faster native
-conversation read, avoidance of SDK stalls, voice and final delivery all remain
-unqualified.
+Both ARM and Simulator targets build with this correction. It was installed
+from `3ad6c16` by replacing only the executable, after a new backup and hash check
+of all 65 current saved-data files. The installed executable's SHA-256 is
+`8cbf5e1196739ebaac22671f5ab8d2396da85fdc9ad74830c0dbdc7cae44fc88`.
+The saved-data hashes were unchanged by installation.
+
+Fresh reads of the verification conversation completed across multiple relay
+connections. A header-only Hub trace showed predominantly full 512-byte segments
+and prompt receive-credit restoration, with no TCP reset in its 130-second
+capture. A separate `itemLimit:24` read measured 74,249 serialized bytes at that
+point. The old 40-item measurement above describes a different response window.
+One control-map request closed after 12,567 bytes; the client retained its saved
+map, reconnected to the relay, read the conversation again and subsequently
+completed another authenticated map refresh. This partial control failure remains
+part of the result, despite the later successful refreshes.
+
+The reported group conversation also completed a fresh read of seven chat
+messages. That view was selected through the client's existing restored-view
+launch arguments; the separate session-list check used ordinary B/D-pad actions.
+No message was sent to the group conversation. The final storage check found
+the same installed executable hash, backed up all 65 current saved-data files,
+and confirmed that the crash log was byte-identical to the pre-install copy.
+Runtime identity and cache changes were retained; no old data was restored.
+
+## Voice, delivery and remaining stall
+
+The existing saved review draft was sent with one separate A press. Routine
+control maintenance interrupted the fresh read needed before dispatch; the
+client resumed that read, sent the original requested input and cleared the
+draft after acceptance. An independent Hub read found one matching user item
+with one mutation ID and the requested reply, `copper`. The device subsequently
+showed that reply. There was no second Send press.
+
+A fresh physical microphone test played a 9.75-second synthetic spoken phrase
+near the handheld and held A for 14 seconds. The installed client recorded these
+boundaries:
+
+- Microphone capture began synchronously with the button action. Network setup
+  began 37 ms later, after 232 samples had already been captured.
+- The first audio reached the outgoing queue at 4.652 seconds and the first
+  caption at 6.019 seconds, while A remained held. A captured Recording screen
+  contains the partial phrase.
+- Release occurred at 14.005 seconds. The final caption arrived at 15.857 seconds,
+  after 111,920 mu-law audio bytes; the device then showed Review message.
+- The OpenAI TLS connection coexisted with the established DERP TLS connection
+  and retired cleanly after finalization. No third TLS connection was used.
+
+A separate A press sent the reviewed phrase once. The authoritative Hub read
+found one matching user item and the requested `amber lantern` reply. However,
+the device did not immediately receive that reply: its DERP connection stalled
+with 117 pending SDK write bytes after 110,989 received bytes. SDK error remained
+zero until the client's progress deadline. Retirement did not reach its worker
+fence, and the existing fallback restarted the runtime. This happened about
+726 seconds after the executable's initial launch.
+
+The replacement runtime restored the verification conversation with an empty
+accepted draft, authenticated again, read fifteen chat messages and displayed
+`amber lantern`. No second send was requested or observed. This establishes one
+successful recovery after this build's natural write stall. It does **not**
+establish repeated restart safety or eliminate the independent SDK failure.
+The 512-byte receive-credit correction improves completed reads; it is not a
+complete transport repair.
 
 ## Display and restart boundary
 
@@ -159,10 +216,14 @@ called its draw routine and returned a display-update result. The current source
 returns zero immediately from both restart call sites. Later callbacks retain
 their existing guard. ARM and Simulator builds and the existing storage,
 socket-ownership and Hub-recovery checks passed. This correction was installed
-with the 512-byte candidate. That run did not exercise a runtime restart, so its physical restart behavior and the reported
-flicker remain unqualified. The crash log read before installation contained no
-new recorded crash from the flashing interval; USB disappearance alone cannot
-establish a crash.
+with the 512-byte candidate and is included in the receive-credit build.
+Sixteen additional passive captures before the latter install were pixel-identical.
+Jesse then confirmed that the display was steady during the current native run.
+The later write stall exercised one automatic restart and restored the conversation.
+These observations do not isolate the rendering correction as the cause of the
+improvement or establish repeated restart safety. The crash log read before
+installation contained no new recorded crash from the flashing interval; USB
+disappearance alone cannot establish a crash.
 
 ## Firmware boundary
 
