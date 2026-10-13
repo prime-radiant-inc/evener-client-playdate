@@ -14,6 +14,7 @@ CHUNK = bytes([0x3C]) * (16 * 1024)
 RECEIPT_BYTE = 0xA5
 RECEIPT_BYTES = 117
 LIMIT_SECONDS = 120
+LOCKSTEP_BYTES = 1200
 
 
 def report(event, **fields):
@@ -26,7 +27,7 @@ def connection_info(connection):
             "send_buffer_bytes": struct.unpack_from("=I", info, 32)[0]}
 
 
-def serve(connection, peer, chunk_bytes, interval, expected_receipts, receipt_connection=None):
+def serve(connection, peer, chunk_bytes, interval, expected_receipts, receipt_connection=None, lockstep=False):
     receipt_connection = receipt_connection or connection
     connection.setblocking(False)
     receipt_connection.setblocking(False)
@@ -39,14 +40,16 @@ def serve(connection, peer, chunk_bytes, interval, expected_receipts, receipt_co
     last_send = last_receive = started
     bad_bytes = 0
     outcome = "timeout"
+    limit_seconds = 180 if lockstep else LIMIT_SECONDS
     report("connected", peer=peer, chunk_bytes=len(chunk), interval_ms=interval * 1000, expected_tx=TOTAL_BYTES,
-           receipt_bytes=RECEIPT_BYTES, expected_receipts=expected_receipts, limit_seconds=LIMIT_SECONDS)
-    while time.monotonic() - started < LIMIT_SECONDS:
+           receipt_bytes=RECEIPT_BYTES, expected_receipts=expected_receipts, limit_seconds=limit_seconds, lockstep=lockstep)
+    while time.monotonic() - started < limit_seconds:
         before_select = time.monotonic()
-        ready_to_send = connection in read_connections and sent < TOTAL_BYTES and before_select >= next_send
+        send_limit = min(TOTAL_BYTES, (received // RECEIPT_BYTES + 1) * LOCKSTEP_BYTES) if lockstep else TOTAL_BYTES
+        ready_to_send = connection in read_connections and sent < send_limit and before_select >= next_send
         timeout = (
             min(0.1, max(0.001, next_send - before_select))
-            if connection in read_connections and sent < TOTAL_BYTES and not ready_to_send
+            if connection in read_connections and sent < send_limit and not ready_to_send
             else 0.1
         )
         readable, writable, _ = select.select(
@@ -80,7 +83,7 @@ def serve(connection, peer, chunk_bytes, interval, expected_receipts, receipt_co
             break
         if writable:
             try:
-                count = connection.send(memoryview(chunk)[:min(len(chunk), TOTAL_BYTES - sent)])
+                count = connection.send(memoryview(chunk)[:min(len(chunk), send_limit - sent)])
             except BlockingIOError:
                 count = 0
             except OSError as error:
@@ -112,11 +115,16 @@ def main():
     parser.add_argument("--port", type=int, default=19184, help="nonprivileged port; must match main.c")
     parser.add_argument("--receipts", type=int, choices=(1, 10), nargs="+", default=[10],
                         help="receipt counts for sequential runs: 1 for download, 10 for duplex/fence/split")
+    parser.add_argument("--lockstep", action="store_true", help="wait for a receipt after every 1200-byte block")
     parser.add_argument("--split", action="store_true", help="accept receipts separately on port + 1")
     parser.add_argument("--block-first", action="store_true", help="hold an unread connection before the measured transfer")
     parser.add_argument("--chunk", type=int, default=16384)
     parser.add_argument("--interval-ms", type=float, default=0)
     args = parser.parse_args()
+    if args.lockstep:
+        if args.split or args.block_first or args.receipts != [10]:
+            parser.error("lockstep is a separate transfer experiment")
+        args.receipts = [(TOTAL_BYTES + LOCKSTEP_BYTES - 1) // LOCKSTEP_BYTES]
     if args.split and args.block_first:
         parser.error("split and blocked-write experiments are separate")
     if not 1 <= args.chunk <= 16384 or args.interval_ms < 0:
@@ -157,7 +165,7 @@ def main():
                     report("FAIL", outcome="no_connection")
                     return 1
                 results.append(serve(connection, peer, args.chunk, args.interval_ms / 1000,
-                                     expected_receipts, receipt_connection))
+                                     expected_receipts, receipt_connection, args.lockstep))
         return 0 if all(results) else 1
 
 

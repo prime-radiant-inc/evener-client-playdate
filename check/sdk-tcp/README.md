@@ -29,9 +29,10 @@ run /Games/RawTCP.pdx YOUR_MAC_LAN_IP duplex
 ```
 
 Allow the local network permission if requested. The primary port is 19184.
-Each phase ends after a verified download, an SDK failure, closure or 60 seconds.
+Each phase ends after a verified download, an SDK failure, closure or 60 seconds
+(180 seconds in `lockstep` mode).
 Restart the server for each experiment. Its maximum
-accept/transfer wait is 120 seconds. TCP window diagnostics use macOS's
+accept/transfer wait is 120 seconds (180 seconds for a lockstep transfer). TCP window diagnostics use macOS's
 `TCP_CONNECTION_INFO` structure.
 
 The launch modes are:
@@ -43,6 +44,15 @@ The launch modes are:
 - `fence`: like duplex, but wait for a queued `network.setEnabled(true)` callback
   after each write before reading or writing again. SDK 3.1.2 dispatches that
   operation on the same worker; it is an implementation-specific ordering check.
+- `resume`: like duplex, but call a zero-length SDK read when availability is
+  empty. The firmware read path checks whether its network receive ring needs
+  resuming; the availability getter alone does not. This isolates the resume
+  poll already used by Evener from its protocols and socket adapter.
+- `lockstep`: the server sends one 1200-byte block, then waits for its receipt
+  before sending the next. Start the server with `--lockstep`; every block is
+  verified, including the final short block, for 874 receipts total. This tests
+  strict request/reply ordering on one connection, as distinct from rate pacing
+  or a two-packet receive window. It does not exercise DERP or inner TCP ACKs.
 - `split`: open a receipt sender on port 19185, then a receiver on 19184. Start
   the server with `--split`. This is a plain TCP isolation check, not a proposed
   second encrypted DERP connection: the client must reserve one of its two TLS
@@ -69,7 +79,7 @@ close/release. Update and system-event processing return after the restart
 request without further rendering or cleanup scheduling. Asynchronous callbacks
 remain installed. That cleanup happens after the measured outcome. All modes
 use static input/output buffers and a 64 KiB SDK read buffer. Empty availability
-polls do not issue zero-length reads.
+polls issue zero-length reads only in `resume` mode.
 
 These checks are opt-in hardware diagnostics, not part of default tests.
 See [the recorded hardware observations](../../docs/qualification/2026-10-12-sdk-tcp.md).

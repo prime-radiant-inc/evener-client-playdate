@@ -6,13 +6,14 @@
 #define PORT 19184
 #define TOTAL (1024u * 1024u)
 #define RECEIPTS 10u
+#define LOCKSTEP_BYTES 1200u
 
 static PlaydateAPI *pd;
 static const struct playdate_tcp *tcp;
 static TCPConnection *connection, *sender;
 static LCDFont *font;
 static bool requested, allowed, started, connected, closed, done, passed;
-static bool download_only, fence_writes, worker_pending, cleanup_queued;
+static bool download_only, fence_writes, worker_pending, cleanup_queued, resume_reads, lockstep;
 static bool split, sender_requested, sender_allowed, sender_started, sender_connected, sender_closed;
 static bool restart_on_stall, block_writes, pressure_fence, restarting;
 static size_t pressure_pending;
@@ -118,7 +119,7 @@ static void pump_pressure(float time) {
 
 static void pump(void) {
     float time = now();
-    if (time - start_time >= 60) { finish(false, "Experiment deadline"); return; }
+    if (time - start_time >= (lockstep ? 180 : 60)) { finish(false, "Experiment deadline"); return; }
     if (!connected) return;
     if (restart_on_stall && time - last_read >= 5) {
         restart_download("RESTART_AFTER_STALL"); return;
@@ -132,7 +133,10 @@ static void pump(void) {
     if (worker_pending) return;
     for (unsigned budget = 0; budget < 65536;) {
         size_t available = tcp->getBytesAvailable(connection);
-        if (!available) break;
+        if (!available) {
+            if (resume_reads) tcp->read(connection, buffer, 0);
+            break;
+        }
         size_t count = available < sizeof(buffer) ? available : sizeof(buffer);
         int read = tcp->read(connection, buffer, count);
         if (read < 0) { finish(false, "SDK read failed"); return; }
@@ -145,8 +149,12 @@ static void pump(void) {
         last_read = time;
         if (received > TOTAL) { finish(false, "Excess input"); return; }
     }
-    unsigned expected_writes = download_only ? 1u : RECEIPTS;
-    if ((!download_only || received == TOTAL) && writes < expected_writes
+    unsigned expected_writes = lockstep ? (TOTAL + LOCKSTEP_BYTES - 1) / LOCKSTEP_BYTES :
+        download_only ? 1u : RECEIPTS;
+    unsigned receipt_after = (writes + 1) * LOCKSTEP_BYTES;
+    if (receipt_after > TOTAL) receipt_after = TOTAL;
+    bool receipt_ready = lockstep ? received >= receipt_after : !download_only || received == TOTAL;
+    if (receipt_ready && writes < expected_writes
             && tcp->getSentBytesPending(outbound()) == 0) {
         int written = tcp->write(outbound(), receipt, sizeof(receipt));
         if (written != sizeof(receipt)) { finish(false, "SDK write did not accept receipt"); return; }
@@ -218,6 +226,8 @@ static int update(void *context) {
     const char *mode_label = "Duplex: 10 receipts";
     if (download_only) mode_label = "Download control";
     else if (fence_writes) mode_label = "Duplex with worker fence";
+    else if (lockstep) mode_label = "One received block per receipt";
+    else if (resume_reads) mode_label = "Duplex with receive resume";
     else if (split) mode_label = "Separate receive/send sockets";
     else if (restart_on_stall) mode_label = "Restart after receive stall";
     else if (block_writes) mode_label = "Restart after blocked write";
@@ -249,6 +259,8 @@ int eventHandler(PlaydateAPI *api, PDSystemEvent event, uint32_t arg) {
         if (args && *args) sscanf(args, "%255s %15s", host, mode);
         download_only = strcmp(mode, "download") == 0;
         fence_writes = strcmp(mode, "fence") == 0;
+        resume_reads = strcmp(mode, "resume") == 0;
+        lockstep = strcmp(mode, "lockstep") == 0;
         split = strcmp(mode, "split") == 0;
         restart_on_stall = strcmp(mode, "restart") == 0;
         block_writes = strcmp(mode, "blocked") == 0;
