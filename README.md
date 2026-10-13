@@ -286,6 +286,10 @@ build/check/network-socket
 # Saved transcript window and authoritative refresh, without network access:
 make -f check/Makefile build/check/hub-recovery
 build/check/hub-recovery
+
+# TCP receive credit through real packets, without sockets or credentials:
+make -f check/Makefile build/check/tcp-receive
+build/check/tcp-receive
 ```
 
 The cross-client acoustic checks live with the shared pairing implementation in

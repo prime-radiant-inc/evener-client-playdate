@@ -102,10 +102,50 @@ of 600-byte segments. The client sometimes replenished capacity after only one
 of the pair, so traffic remained pipelined. The Hub runs Linux 6.8; upstream
 [`tcp_bound_to_half_wnd`](https://github.com/torvalds/linux/blob/v6.8/include/net/tcp.h)
 explains the half-window packetization. It does not halve windows at or below
-`TCP_MSS_DEFAULT` (536 bytes for IPv4). A matching 512-byte MSS and receive window
-is therefore the next isolated candidate, subject to an actual packet capture
-and repeated native-client, voice and delivery checks. Both targets compile.
-This candidate has not been installed or qualified on hardware.
+`TCP_MSS_DEFAULT` (536 bytes for IPv4). This motivated a matching 512-byte MSS
+and receive window. Both targets compiled and
+that candidate was installed by replacing only the executable. The 65 current
+saved-data files were backed up again and hash-verified unchanged by installation.
+
+The 108-second native run did not exhibit an SDK pending-write timeout. It did
+not complete a fresh conversation read either. The Hub capture showed recurring
+61/451-byte or 59/453-byte segment pairs, with delayed acknowledgments and reduced
+advertised capacity after the shorter segment. The server reset the first stream
+about 30 seconds after its SYN. The actual Hub binary identifies revision
+`0ef324a1623a2657b75a4a2a4959c3cbc00fd366` with local modifications; its checkout
+contains a 30-second WebSocket write budget. That deadline is consistent with
+the captured reset, but there is no server-side error log proving its cause.
+A separate authoritative read of the verification conversation returned 107,484
+JSON bytes. No server timeout was changed.
+
+The relay completed its subsequent routine control refresh: retirement drained
+its pending bytes and both SDK worker fences completed. This is one successful
+cleanup, not repeated recovery qualification. Voice and message delivery were
+not exercised with this candidate.
+
+## Receive-credit correction
+
+With a 512-byte receive window, lwIP's default window-update threshold withholds
+capacity after a short read. Its delayed ACK then reports less than one MSS of
+available space, and the Linux sender repeatedly delays the next small write.
+The client now advertises the consumed capacity immediately when `tcp_recved`
+has left advertised space below the actual available space. It never grants
+credit for unread bytes and retains the existing bounded receive window.
+
+The packet-level `build/check/tcp-receive` check injects real IP/TCP packets into
+lwIP and drains them through `tn_read`, without sockets, keys or service calls.
+Against the prior receive path it fails after the first 61-byte read because no
+acknowledgment is emitted. With the correction, 61, 451, 1, 2, 59 and 453-byte
+segments each receive an immediate acknowledgment advertising 512 available
+bytes. Reading only 32 bytes of a full window advertises exactly 32; consuming
+the remaining 480 restores 512. Empty reads produce no packet. Assertion checks
+remain enabled independently of the crypto build's `NDEBUG` flag.
+
+Both ARM and Simulator targets build with this correction. It has not yet been
+installed: the device again disappeared from USB after the 512-byte run.
+The packet check establishes the receive-credit behavior only. A faster native
+conversation read, avoidance of SDK stalls, voice and final delivery all remain
+unqualified.
 
 ## Display and restart boundary
 
@@ -118,9 +158,11 @@ Code inspection found that the same update which requested `restartGame` still
 called its draw routine and returned a display-update result. The current source
 returns zero immediately from both restart call sites. Later callbacks retain
 their existing guard. ARM and Simulator builds and the existing storage,
-socket-ownership and Hub-recovery checks passed. This correction has not yet
-been installed or physically qualified, and is not evidence that the SDK worker
-stall or reported flicker is fixed. USB became unavailable before installation.
+socket-ownership and Hub-recovery checks passed. This correction was installed
+with the 512-byte candidate. That run did not exercise a runtime restart, so its physical restart behavior and the reported
+flicker remain unqualified. The crash log read before installation contained no
+new recorded crash from the flashing interval; USB disappearance alone cannot
+establish a crash.
 
 ## Firmware boundary
 

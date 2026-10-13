@@ -271,7 +271,16 @@ size_t tn_read(void *bytes, size_t capacity) {
     if (first < count) memcpy((uint8_t *)bytes + first, tcp_rx, count - first);
     tcp_rx_head = (tcp_rx_head + count) % sizeof(tcp_rx);
     tcp_rx_length -= count;
-    if (count && connection) tcp_recved(connection, (u16_t)count);
+    if (count && connection) {
+        tcp_recved(connection, (u16_t)count);
+        /* With one segment of capacity, withholding credit for a short read
+         * strands the sender below its MSS. Advertise only consumed bytes now. */
+        if (connection->rcv_ann_wnd < connection->rcv_wnd) {
+            connection->rcv_ann_wnd = connection->rcv_wnd;
+            tcp_set_flags(connection, TF_ACK_NOW);
+            tcp_output(connection);
+        }
+    }
     return count;
 }
 /* Tailscale disco/disco.go v1.104.1: NaCl box wrapper and v0 Ping/Pong.

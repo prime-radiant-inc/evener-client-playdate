@@ -32,3 +32,8 @@ build/check/receiver: check/receiver.c check/network.c $(CHECK_STORAGE) src/pair
 build/check/hub-recovery: check/hub_recovery.c $(CHECK_STORAGE) src/hub.c src/cache.c
 	@mkdir -p $(@D)
 	$(CC) $(CHECK_CFLAGS) -DTARGET_EXTENSION=1 -I$(PLAYDATE_SDK_PATH)/C_API -Isrc -Ivendor/tweetnacl $^ -o $@
+
+# Exercise real lwIP packets and the application's receive queue without keys.
+build/check/tcp-receive: check/tcp_receive.c src/lwipopts.h src/json.c $(TAILNET_SRC)
+	@mkdir -p $(@D)
+	$(CC) $(CHECK_CFLAGS) $(CHECK_CPPFLAGS) check/tcp_receive.c src/json.c $(filter-out src/tailnet.c,$(TAILNET_SRC)) -o $@

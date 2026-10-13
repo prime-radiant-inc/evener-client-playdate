@@ -175,6 +175,13 @@ snapshot and mutation reconciliation; transport acknowledgment never establishes
 application acceptance. Cached reading and device-owned input survive that
 recovery.
 
+The experimental receive path limits the Hub to 512 bytes of outstanding TCP
+data. Once the application consumes bytes, it promptly advertises the available
+space, including after a short segment; unread data receives no new credit.
+This avoids delayed window updates starving a sender with only one segment of
+capacity. The packet contract is checked locally, but the transport remains
+subject to the [native hardware qualification](qualification/2026-10-13-transport-workaround.md).
+
 SDK connection admission is queued, with one open attempt at a time and at most
 two TLS connections. Availability polls enter the SDK's receive-resume path even
 when its read buffer is empty, without waiting for or consuming incoming bytes.
