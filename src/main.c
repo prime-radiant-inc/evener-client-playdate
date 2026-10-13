@@ -373,6 +373,7 @@ static void draw(void) {
         const char *hint = voice_state == VOICE_RECORDING ? "Listening... Release A to review" :
             voice_state == VOICE_FINISHING ? "Transcribing...  B Keep  Menu Discard" :
             recording_started && voice_state == VOICE_REVIEW && !final_saved ? "Saving review..." :
+            hub_send_pending() ? "B Conversation" :
             draft.state == DRAFT_READY ? "A Send  B Keep draft  Menu Discard" :
             draft.state == DRAFT_UNCERTAIN || draft.state == DRAFT_SENDING ? "Checking delivery...  B Conversation" :
             draft.state == DRAFT_PARTIAL ? "Partial saved  Menu Discard to retry" : "Hold A Dictate  B Conversation";
@@ -482,7 +483,7 @@ static int update(void *context) {
             pressed &= ~kButtonA;
         }
         bool send_review = screen == SCREEN_COMPOSER && (pressed & kButtonA) &&
-            draft.state == DRAFT_READY && (!recording_started || final_saved) &&
+            draft.state == DRAFT_READY && !hub_send_pending() && (!recording_started || final_saved) &&
             voice_state != VOICE_RECORDING && voice_state != VOICE_FINISHING;
         if (!(held & kButtonA) && voice_state == VOICE_RECORDING) voice_finish();
         char focused[REF_CAPACITY] = "";

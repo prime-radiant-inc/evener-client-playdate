@@ -271,6 +271,112 @@ the saved map allowed the client to connect and read before later maintenance
 completed. This remains a display qualification, not a repair of that separate
 transport failure or proof that SDK runtime recovery is reliable.
 
+## Conversation and send latency
+
+Jesse reported that a reviewed message remained in preparation, briefly showed
+Connected and eventually sent, and that opening another conversation remained
+on Loading. The serial capture showed a full `thread/read` before `turn/start`,
+then repeated connection closures while reading the newly selected conversation.
+The client replaced preparation status with Connected during initialization and
+read completion even when send intent was still pending.
+
+Read-only measurements from the Mac separated Hub generation from device
+transfer cost. The verification conversation's 24-item response was 88,596 bytes;
+its metadata-only response was 16,778. The reported larger conversation's
+24-item response was 197,641 bytes; an eight-item response was 151,373, including
+about 70 KB of diagnostics and 61 KB of overlays. These Mac reads completed in
+10–31 ms. The sizes describe those snapshots, not fixed protocol payload sizes.
+The existing `thread/turns/list` endpoint rejected an invented end-of-history
+position with `transcriptItemCursorStale`; that attempted shortcut was not
+implemented in the client.
+
+Send preparation and uncertain-delivery reconciliation now request only current
+thread metadata. They retain the conversation window, older cursor, draft and
+original submission identity, and run before the ordinary history refresh.
+Metadata does not make cached history authoritative. Initial and older history
+pages request eight projected items. The pending composer keeps preparation
+visible and does not let another A press restart it. Completed and interrupted
+requests log elapsed time and byte counts without message text or credentials.
+
+The focused Hub check failed on the prior code's history-bearing preparation
+request. It passes with metadata-only preparation, real draft persistence,
+unchanged cached rows/cursor, replay using the original mutation identity,
+refusal to replay without mutation authority, and settlement from a recorded
+receipt. The existing socket check still passes its one-write, callback-ownership
+and two-TLS-slot cases. Both ARM and Simulator targets build.
+
+A first physical candidate used only the smaller requests and status change.
+Its installed executable SHA-256 was
+`ac0d22449ff9c6ed3c6aebebfc93d4a842a765ffd0b954af5cb1c07a58affe66`.
+All 67 saved-data files were backed up and unchanged by installation. Control,
+DERP and WireGuard authenticated, but the large conversation read still closed
+before completion. Reducing the page size alone did not repair that run.
+
+The next candidate also flushes relay output immediately after the WebSocket
+reader consumes native TCP bytes. Previously the receive-credit acknowledgment
+waited for the next 30 Hz update before reaching the SDK. The shared output loop
+retains its existing budget and outstanding-write gate; it adds no socket or
+receive polling. The installed executable SHA-256 is
+`61ec16c05c636228e211806cef609b97689cff7ab37454e5a4ab14f92ce04b8e`.
+All 68 current saved-data files were backed up and unchanged by installation.
+
+That physical run completed the initial 143,590-byte response in 16.897 seconds,
+then a 7,503-byte older page in 0.875 seconds and an 11,620-byte navigation read
+in 1.450 seconds. A captured screen displayed the reported conversation's chat.
+This is a completed read where the preceding candidate failed, but a roughly
+17-second first open is still slow. The existing Hub response includes substantial
+diagnostics and overlays the client does not display; no Hub API, server timeout,
+radio configuration or firmware was changed.
+
+The final executable adds only a concise pending-send footer to that candidate.
+Its installed SHA-256 is
+`8533e58300611138fc23f8b6c6c52524ba4d558477637e5a1df4dfef00b63689`.
+All 68 current saved-data files were backed up and hash-verified unchanged by
+installation. The saved review draft survived replacement of the executable.
+The verification conversation's fresh 32,854-byte read completed in 3.508 seconds.
+
+One separate A press requested delivery of that saved review. Its first
+metadata request received no response: a 229-byte SDK write remained pending,
+and routine Tailscale maintenance interrupted the request after 13.446 seconds.
+The close fence did not complete and runtime recovery restarted the app. Without
+another Send press, the restored send intent fetched 16,796 bytes of current
+metadata in 1.868 seconds and received `turn/start` acceptance 75 ms later.
+Independent read-only Hub checks found no matching fixture before the press and
+one completed user item with one mutation identity afterward, followed by the
+requested `Silver Meadow` reply. The device displayed both. The fast timings
+are the successful post-reconnect requests, not the total time from the press.
+
+A first voice fixture had been captured during control maintenance: recording
+started immediately and its saved audio produced a complete review, but captions
+arrived after release. A second physical microphone run on the final executable
+started with DERP established. Capture began synchronously; network setup began
+39 ms later with 232 samples already captured. Audio first queued at 4.530 seconds,
+and the first caption arrived at 5.736 seconds while A remained held. Release was
+at 14.029 seconds and the final review arrived at 15.648 seconds, after 112,105
+mu-law bytes. Captured Recording and Review screens contain the spoken fixture.
+Three Hub navigation reads completed while transcription was active; the OpenAI
+socket retired cleanly while DERP remained connected. The two TLS connections
+were DERP and transcription, with no third connection opened during the recording.
+
+
+A separate A press sent the new review once as the next relay connection came
+online. Metadata preparation took 1.769 seconds for 16,690 bytes; acceptance took
+76 ms. Independent Hub reads found no matching fixture before that press and
+one completed user item with one mutation identity afterward, plus the requested
+`Cedar Harbor` reply. Its next history refresh stalled after 234 buffered bytes
+and timed out at 35.012 seconds. The SDK held a 234-byte outgoing write and again
+failed to complete retirement. Automatic runtime recovery restored the transcript
+with an empty accepted draft, completed a fresh 33,352-byte read in 3.873 seconds,
+and displayed the reply. No second Send press was used for either fixture.
+
+These runs qualify the smaller preparation request, pending status, preserved
+send intent, direct live transcription alongside DERP and eventual replies on
+this executable. They also reproduce two SDK write stalls and dependence on
+runtime recovery. Neither the roughly 17-second large cold read nor the larger
+stall-related delays are resolved. The latest physical screen showed both
+accepted messages and replies; no new crash-log inspection was made after those
+runtime recoveries.
+
 ## Firmware boundary
 
 The [public SDK changelog](https://sdk.play.date/changelog/) lists 3.1.2 as the

@@ -10,7 +10,9 @@
 
 static WebSocket *transport;
 static unsigned request_id;
-static char method[64];
+static char method[64], mutation[65];
+static bool includes_turns;
+static unsigned submissions;
 enum VoiceState voice_state;
 const char *tailnet_device_status(void) { return ""; }
 void ws_connect(WebSocket *ws, const char *host, int port, bool tls, const char *path,
@@ -27,6 +29,12 @@ bool ws_send(WebSocket *ws, const char *message) {
     Json j; CHECK(json_parse(&j, message, strlen(message)));
     request_id = json_int(&j, json_get(&j, 0, "id"));
     CHECK(json_field(&j, 0, "method", method, sizeof(method)));
+    int params = json_get(&j, 0, "params");
+    if (!strcmp(method, "thread/read")) includes_turns = json_is(&j, json_get(&j, params, "includeTurns"), "true");
+    if (!strcmp(method, "turn/start") || !strcmp(method, "turn/queue")) {
+        submissions++;
+        CHECK(json_field(&j, params, "clientMutationId", mutation, sizeof(mutation)));
+    }
     json_free(&j); return true;
 }
 static void reply(const char *result) {
@@ -47,12 +55,50 @@ static void page(const char *snapshot, int first, int count, bool older) {
     CHECK(snprintf(result + n, sizeof(result) - n, "]}]%s}", older ? "" : "}") < sizeof(result) - n);
     reply(result);
 }
-static void read_latest(const char *snapshot, int count) {
+static void connect_hub(void) {
     hub_connect(); hub_update(); CHECK(!strcmp(method, "initialize"));
     reply("{\"protocolVersion\":\"evener-appwire-v7\"}");
     hub_update(); CHECK(!strcmp(method, "initialized"));
+}
+static void read_latest(const char *snapshot, int count) {
+    connect_hub();
     hub_update(); CHECK(!strcmp(method, "thread/read"));
     page(snapshot, 1000, count, false); CHECK(hub_hydrated);
+}
+static void metadata(const char *accepted, bool authoritative) {
+    char result[1024];
+    int n = snprintf(result, sizeof(result), "{\"thread\":{\"status\":{\"type\":\"idle\"},"
+        "\"evener\":{\"instanceId\":\"fixture-instance\",\"capabilities\":{\"send\":true},"
+        "\"mutationStateAuthoritative\":%s,\"pendingMutations\":[{\"clientMutationId\":\"%s\"}]}}}",
+        authoritative ? "true" : "false", accepted);
+    CHECK(n > 0 && n < sizeof(result)); reply(result);
+}
+static void prepare_after_reconnect(void) {
+    connect_hub();
+    hub_update(); CHECK(!strcmp(method, "thread/read") && !includes_turns);
+}
+static void send_metadata(void) {
+    int saved_count = chat_count;
+    char anchor[192]; snprintf(anchor, sizeof(anchor), "%s", chat[0].key);
+    CHECK(draft_set("sentinel-input", true));
+    hub_send(); CHECK(hub_send_pending()); hub_update();
+    CHECK(!strcmp(method, "thread/read") && !includes_turns);
+    metadata("", true);
+    CHECK(chat_count == saved_count && !strcmp(chat[0].key, anchor));
+    CHECK(hub_has_older && hub_hydrated && hub_send_pending());
+    hub_update(); CHECK(!strcmp(method, "turn/start") && submissions == 1);
+    CHECK(draft.state == DRAFT_SENDING && draft_load(selected_ref));
+    CHECK(draft.state == DRAFT_UNCERTAIN && !strcmp(draft.mutation, mutation));
+    char sent[65]; snprintf(sent, sizeof(sent), "%s", mutation);
+    hub_close(); CHECK(draft.state == DRAFT_UNCERTAIN);
+    prepare_after_reconnect(); metadata("", true);
+    CHECK(!hub_hydrated && chat_count == saved_count);
+    hub_update(); CHECK(submissions == 2 && !strcmp(sent, mutation));
+    hub_close(); prepare_after_reconnect(); metadata("", false);
+    hub_update(); CHECK(submissions == 2 && draft.state == DRAFT_UNCERTAIN && !hub_send_pending());
+    hub_close(); prepare_after_reconnect(); metadata(sent, true);
+    CHECK(draft.state == DRAFT_EMPTY && !hub_send_pending() && submissions == 2);
+    CHECK(chat_count == saved_count && !strcmp(chat[0].key, anchor));
 }
 int main(int argc, char **argv) {
     bool ordinary = argc > 1 && !strcmp(argv[1], "ordinary-selection");
@@ -88,10 +134,11 @@ int main(int argc, char **argv) {
     if (!unpinned) hub_set_reading_anchor("row928");
     read_latest("snapshot-full", 24);
     CHECK(chat_count == CHAT_CAPACITY && !strcmp(chat[0].key, "row928"));
+    send_metadata();
     hub_close(); hub_reset_profile();
     DIR *dir = opendir("."); CHECK(dir); struct dirent *entry;
     while ((entry = readdir(dir))) if (strcmp(entry->d_name, ".") && strcmp(entry->d_name, "..")) CHECK(!unlink(entry->d_name));
     closedir(dir); CHECK(!chdir("/")); CHECK(!rmdir(directory));
-    puts("PASS saved older window, full-capacity anchor, incarnation change and failed checkpoint");
+    puts("PASS saved older window, full-capacity anchor, incarnation change, failed checkpoint and metadata-only send recovery");
     return 0;
 }

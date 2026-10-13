@@ -100,8 +100,10 @@ path; input, recording and networking continue on every update.
 Opened navigation pages and conversation windows are cached in the device's
 data directory, preserving reading across disconnects and restarts. The client
 shows saved content while it refreshes. A successful fresh read replaces the
-startup cache; a failed refresh leaves it readable. Cached content never grants
-send capabilities or establishes mutation acceptance.
+startup cache; a failed refresh leaves it readable. History requests use eight
+projected items per page, with older items fetched as the person scrolls or when
+the first page contains too few chat messages. Cached content never grants send
+capabilities or establishes mutation acceptance.
 
 ## Voice and delivery
 
@@ -146,8 +148,14 @@ the tail still waiting in RAM; flushed audio and saved text recover.
 The device owns drafts and pending submission identity. It persists the full
 text, method, mutation ID and expected instance before dispatch. The existing
 Hub and daemon contracts own resume, queue admission, idempotence and durable
-acceptance. Active sessions receive queued input. Reconnect re-reads the
-selected thread and retains older rows and drafts. Accepted identities settle
+acceptance. Active sessions receive queued input. Preparing a send reads current
+session metadata without downloading history again. It keeps the conversation
+window and older-history cursor, and the composer continues to show the pending
+send until it dispatches or reports a failure. Another A press while preparation
+is pending does not start another preparation read. After reconnect, delivery
+reconciliation takes priority over refreshing history and session lists. That
+metadata read does not mark cached conversation text as freshly loaded.
+Accepted identities settle
 pending submissions; an authoritative mutation snapshot permits replay with
 the original identity and payload. An uncertain send is never turned into a
 new mutation merely because a response was lost.
@@ -184,6 +192,9 @@ recovery.
 The experimental receive path limits the Hub to 512 bytes of outstanding TCP
 data. Once the application consumes bytes, it promptly advertises the available
 space, including after a short segment; unread data receives no new credit.
+The WebSocket reader flushes the relay output after consuming those bytes, so
+acknowledgments need not wait for the next game update. That flush uses the same
+bounded queue and one-outstanding-write admission as ordinary relay output.
 This avoids delayed window updates starving a sender with only one segment of
 capacity. The packet contract is checked locally, but the transport remains
 subject to the [native hardware qualification](qualification/2026-10-13-transport-workaround.md).
