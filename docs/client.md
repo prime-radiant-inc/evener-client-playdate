@@ -91,6 +91,12 @@ single-line footer reserve most of the display for conversation text. The footer
 shows connection or session status alongside controls when both fit; longer
 recovery instructions take priority. Navigation displays six rows per screen.
 
+The client composes each screen in an offscreen bitmap before copying changed
+pixel rows to the display buffer. An unchanged frame requests no display update,
+so idle network activity does not require clearing and repainting the visible
+conversation. Setup, authorization, navigation and voice use the same presentation
+path; input, recording and networking continue on every update.
+
 Opened navigation pages and conversation windows are cached in the device's
 data directory, preserving reading across disconnects and restarts. The client
 shows saved content while it refreshes. A successful fresh read replaces the

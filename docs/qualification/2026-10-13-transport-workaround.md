@@ -225,6 +225,52 @@ improvement or establish repeated restart safety. The crash log read before
 installation contained no new recorded crash from the flashing interval; USB
 disappearance alone cannot establish a crash.
 
+## Idle display composition
+
+Jesse subsequently reported a whole-screen repaint while the conversation was
+sitting still. An equal-rate comparison captured 180 USB screen frames at four
+frames per second before and after the display change. The baseline contained
+one partly painted frame: rows 102 through 239 changed, the lower conversation
+and footer were blank, and the next capture restored the complete screen. There
+was no logged runtime restart at that point. The other baseline change was
+confined to the footer. A USB framebuffer capture is not an optical recording
+of the LCD, so this observation alone does not prove what reached the panel.
+
+The application had cleared and redrawn the working display buffer on every
+30 Hz update. It now composes each screen in one offscreen bitmap, copies only
+changed visible rows into the working buffer, and marks those row ranges for
+presentation. An identical frame returns zero from the update callback. Setup,
+authorization, navigation and voice share that path. Input, microphone work and
+network maintenance retain their existing update schedule. This is completed
+frame composition followed by row copies, not an atomic framebuffer swap.
+
+Both ARM and macOS Simulator targets built. A temporary host check exercised
+the actual presentation function against an SDK graphics boundary: the working
+buffer remained untouched while painting; an unchanged frame requested no
+update; disjoint changed rows produced the expected inclusive ranges; different
+bitmap/display strides and display padding were respected; and an external
+change to the working buffer was restored on the next frame. No configured
+Simulator runtime was launched alongside the device's native identity.
+
+Only the physical executable was replaced. All 65 current saved-data files were
+backed up and hash-verified unchanged by installation. The installed executable
+SHA-256 is
+`4d0032bb8ff9c614bfa43702de5b340a462dde693476140ccb37a6a7713f0c93`.
+
+All 180 post-install idle captures had identical conversation pixels (rows
+24 through 223); changes were confined to footer rows 227 through 239. No partly
+blank conversation frame was observed. Jesse separately confirmed that the
+physical display looked steady. Opening and dismissing the system menu, then
+locking and unlocking once, returned to a steady conversation according to
+Jesse. The serial capture recorded pause/resume and lock events, disconnected
+during locking, and was reopened after USB returned. This was one lifecycle
+cycle, not repeated recovery qualification. The idle capture also recorded three completed
+conversation reads across relay connections and two successful control-map
+refreshes. The initial control-map connection had closed after 24,995 bytes;
+the saved map allowed the client to connect and read before later maintenance
+completed. This remains a display qualification, not a repair of that separate
+transport failure or proof that SDK runtime recovery is reliable.
+
 ## Firmware boundary
 
 The [public SDK changelog](https://sdk.play.date/changelog/) lists 3.1.2 as the

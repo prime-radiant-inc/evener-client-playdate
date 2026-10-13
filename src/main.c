@@ -15,6 +15,7 @@
 PlaydateAPI *pd;
 Configuration config;
 static LCDFont *font, *small_font;
+static LCDBitmap *canvas;
 enum { MARGIN = 8, CONTENT_TOP = 24, CONTENT_HEIGHT = 196, FOOTER_TOP = 224, SESSION_ROWS = 6, BUBBLE_WIDTH = 374 };
 enum Screen { SCREEN_SESSIONS, SCREEN_TRANSCRIPT, SCREEN_COMPOSER, SCREEN_AUTH };
 static enum Screen screen;
@@ -378,6 +379,41 @@ static void draw(void) {
         footer(hint, recording_started || voice_state == VOICE_ERROR ? voice_status : hub_status);
     }
 }
+static void draw_setup(void) {
+    if (pairing_active()) pairing_draw(small_font);
+    else {
+        pd->graphics->clear(kColorWhite); pd->graphics->setFont(small_font);
+        text(error[0] ? error : "Set up Evener\n\nOpen Evener Settings on your phone or computer, then press A here to receive setup.", 12, 38, 376, 170);
+    }
+}
+static int render(void (*paint)(void)) {
+    if (!canvas) { paint(); return 1; }
+    // Keep clearing and text layout away from the displayed buffer. Only a
+    // completed frame can replace its pixels, and idle rows need no refresh.
+    pd->graphics->pushContext(canvas);
+    paint();
+    pd->graphics->popContext();
+    int stride;
+    uint8_t *pixels;
+    pd->graphics->getBitmapData(canvas, NULL, NULL, &stride, NULL, &pixels);
+    uint8_t *frame = pd->graphics->getFrame();
+    int first = -1;
+    bool changed = false;
+    for (int y = 0; y < LCD_ROWS; y++) {
+        uint8_t *target = frame + y * LCD_ROWSIZE;
+        const uint8_t *source = pixels + y * stride;
+        if (memcmp(target, source, LCD_COLUMNS / 8)) {
+            memcpy(target, source, LCD_COLUMNS / 8);
+            if (first < 0) first = y;
+            changed = true;
+        } else if (first >= 0) {
+            pd->graphics->markUpdatedRows(first, y - 1);
+            first = -1;
+        }
+    }
+    if (first >= 0) pd->graphics->markUpdatedRows(first, LCD_ROWS - 1);
+    return changed;
+}
 static int update(void *context) {
     (void)context;
     if (network_restarting) return 0;
@@ -386,7 +422,7 @@ static int update(void *context) {
     if (pairing_active()) {
         net_tick();
         enum PairingResult result = pairing_update(pressed);
-        if (result == PAIRING_RUNNING) { pairing_draw(small_font); return 1; }
+        if (result == PAIRING_RUNNING) return render(draw_setup);
         if (result == PAIRING_APPLIED) {
             reset_profile(); screen = config.use_tailnet ? SCREEN_AUTH : SCREEN_SESSIONS;
             error[0] = 0;
@@ -402,12 +438,7 @@ static int update(void *context) {
     }
     if (!settings_ready()) {
         if (setup_requested || (pressed & kButtonA)) { setup_requested = false; receive_setup(); }
-        if (pairing_active()) pairing_draw(small_font);
-        else {
-            pd->graphics->clear(kColorWhite); pd->graphics->setFont(small_font);
-            text(error[0] ? error : "Set up Evener\n\nOpen Evener Settings on your phone or computer, then press A here to receive setup.", 12, 38, 376, 170);
-        }
-        return 1;
+        return render(draw_setup);
     }
     if (!error[0] && !permissions_ready && !permission_pending) {
         enum accessReply reply = kAccessAsk;
@@ -434,7 +465,7 @@ static int update(void *context) {
                     }
                     else snprintf(error, sizeof(error), "Could not finish saving the new identity. Press A to retry. Your drafts are kept.");
                 }
-                draw_authorization(); return 1;
+                return render(draw_authorization);
             }
             if (config.use_tailnet) tailnet_device_update();
             hub_update();
@@ -442,7 +473,7 @@ static int update(void *context) {
             else {
                 if (pressed & kButtonA) reconnect(NULL);
                 if (recover_network()) return 0;
-                draw_authorization(); return 1;
+                return render(draw_authorization);
             }
         }
         if ((pressed & kButtonA) && (screen == SCREEN_TRANSCRIPT ||
@@ -511,7 +542,7 @@ static int update(void *context) {
                 if (voice_state == VOICE_RECORDING) voice_finish();
                 else {
                     if (recording_started && !save_voice()) {
-                        draw(); return 1;
+                        return render(draw);
                     }
                     voice_close(); refresh_saved_audio(); screen = SCREEN_TRANSCRIPT; recording_started = false; reset_scroll();
                 }
@@ -545,8 +576,7 @@ static int update(void *context) {
         }
     }
     if (recover_network()) return 0;
-    draw();
-    return 1;
+    return render(draw);
 }
 #ifdef _WINDLL
 __declspec(dllexport)
@@ -564,6 +594,8 @@ int eventHandler(PlaydateAPI *playdate, PDSystemEvent event, uint32_t arg) {
         const char *reason = NULL;
         font = pd->graphics->loadFont("/System/Fonts/Roobert-10-Bold.pft", &reason);
         small_font = pd->graphics->loadFont("fonts/Nontendo-Light", &reason);
+        canvas = pd->graphics->newBitmap(LCD_COLUMNS, LCD_ROWS, kColorWhite);
+        if (!canvas) app_log("Could not allocate the offscreen display buffer");
         pd->display->setRefreshRate(30);
         pd->system->setUpdateCallback(update, NULL);
         pd->system->addMenuItem("Discard draft", discard, NULL);
