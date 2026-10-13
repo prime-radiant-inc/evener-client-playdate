@@ -19,8 +19,9 @@
 #define IP_REASSEMBLY 0
 #define IP_FRAG 0
 #define LWIP_TCP 1
-#define TCP_MSS 1200
-#define TCP_WND 16384
+// A 512-byte window avoids Linux splitting capacity into two smaller segments.
+#define TCP_MSS 512
+#define TCP_WND TCP_MSS
 #define TCP_SND_BUF 16384
 #define TCP_SND_QUEUELEN 64
 #define TCP_QUEUE_OOSEQ 1

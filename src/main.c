@@ -15,6 +15,7 @@
 PlaydateAPI *pd;
 Configuration config;
 static LCDFont *font, *small_font;
+static LCDBitmap *canvas;
 enum { MARGIN = 8, CONTENT_TOP = 24, CONTENT_HEIGHT = 196, FOOTER_TOP = 224, SESSION_ROWS = 6, BUBBLE_WIDTH = 374 };
 enum Screen { SCREEN_SESSIONS, SCREEN_TRANSCRIPT, SCREEN_COMPOSER, SCREEN_AUTH };
 static enum Screen screen;
@@ -202,32 +203,33 @@ static void restore_network_context(void) {
     if (resume_send) hub_send();
     app_log("Network recovery restored view %d; selected %d; draft %d", screen, row.ref[0] != 0, draft.state);
 }
-static void recover_network(void) {
+static bool recover_network(void) {
     if (!net_recovery_needed() || app_time() < network_restart_at || pairing_active() || change_tailnet ||
-        voice_state == VOICE_RECORDING || !voice_audio_saved()) return;
+        voice_state == VOICE_RECORDING || !voice_audio_saved()) return false;
     // Keep the SDK's existing two TLS slots: DERP and transcription. Relaunch
-    // clears a blocked SDK worker without recycling an object it still owns.
+    // attempts recovery without recycling an object the worker still owns.
     static char ref[REF_CAPACITY * 6 + 3], title[160 * 6 + 3];
     static char project[REF_CAPACITY * 6 + 3], project_title[160 * 6 + 3], args[10000];
     static char snapshot[128], quoted_snapshot[128 * 6 + 3];
     network_restart_at = app_time() + 1;
-    if (!hub_save_view(snapshot, sizeof(snapshot)) || !json_quote(snapshot, quoted_snapshot, sizeof(quoted_snapshot))) return;
+    if (!hub_save_view(snapshot, sizeof(snapshot)) || !json_quote(snapshot, quoted_snapshot, sizeof(quoted_snapshot))) return false;
     if (!json_quote(selected_ref, ref, sizeof(ref)) || !json_quote(selected_title, title, sizeof(title)) ||
-        !json_quote(browse_project, project, sizeof(project)) || !json_quote(browse_title, project_title, sizeof(project_title))) return;
+        !json_quote(browse_project, project, sizeof(project)) || !json_quote(browse_title, project_title, sizeof(project_title))) return false;
     int length = snprintf(args, sizeof(args),
         "{\"networkRecovery\":1,\"screen\":%d,\"ref\":%s,\"title\":%s,\"browse\":%d,\"project\":%s,"
         "\"projectTitle\":%s,\"snapshot\":%s,\"tier\":%d,\"offset\":%d,\"selection\":%d,\"scroll\":%d,\"follow\":%s,\"send\":%s}",
         screen, ref, title, browse_kind, project, project_title, quoted_snapshot, browse_tier, navigation_offset, selection,
         scroll > 0 ? scroll : 0, follow ? "true" : "false", hub_send_pending() ? "true" : "false");
-    if (length < 0 || length >= sizeof(args)) return;
-    if (recording_started && !save_voice()) return;
+    if (length < 0 || length >= sizeof(args)) return false;
+    if (recording_started && !save_voice()) return false;
     if ((!recording_started && draft.ref[0] && !draft_save()) || !voice_prepare_restart()) {
-        snprintf(hub_status, sizeof(hub_status), "Saving your work before reconnecting..."); return;
+        snprintf(hub_status, sizeof(hub_status), "Saving your work before reconnecting..."); return false;
     }
     recording_started = false;
     network_restarting = true;
     app_log("Network recovery restarting app after SDK cleanup stalled");
     pd->system->restartGame(args);
+    return true;
 }
 static void compose(void) {
     screen = SCREEN_COMPOSER; reset_scroll(); recording_started = final_saved = false;
@@ -371,11 +373,47 @@ static void draw(void) {
         const char *hint = voice_state == VOICE_RECORDING ? "Listening... Release A to review" :
             voice_state == VOICE_FINISHING ? "Transcribing...  B Keep  Menu Discard" :
             recording_started && voice_state == VOICE_REVIEW && !final_saved ? "Saving review..." :
+            hub_send_pending() ? "B Conversation" :
             draft.state == DRAFT_READY ? "A Send  B Keep draft  Menu Discard" :
             draft.state == DRAFT_UNCERTAIN || draft.state == DRAFT_SENDING ? "Checking delivery...  B Conversation" :
             draft.state == DRAFT_PARTIAL ? "Partial saved  Menu Discard to retry" : "Hold A Dictate  B Conversation";
         footer(hint, recording_started || voice_state == VOICE_ERROR ? voice_status : hub_status);
     }
+}
+static void draw_setup(void) {
+    if (pairing_active()) pairing_draw(small_font);
+    else {
+        pd->graphics->clear(kColorWhite); pd->graphics->setFont(small_font);
+        text(error[0] ? error : "Set up Evener\n\nOpen Evener Settings on your phone or computer, then press A here to receive setup.", 12, 38, 376, 170);
+    }
+}
+static int render(void (*paint)(void)) {
+    if (!canvas) { paint(); return 1; }
+    // Keep clearing and text layout away from the displayed buffer. Only a
+    // completed frame can replace its pixels, and idle rows need no refresh.
+    pd->graphics->pushContext(canvas);
+    paint();
+    pd->graphics->popContext();
+    int stride;
+    uint8_t *pixels;
+    pd->graphics->getBitmapData(canvas, NULL, NULL, &stride, NULL, &pixels);
+    uint8_t *frame = pd->graphics->getFrame();
+    int first = -1;
+    bool changed = false;
+    for (int y = 0; y < LCD_ROWS; y++) {
+        uint8_t *target = frame + y * LCD_ROWSIZE;
+        const uint8_t *source = pixels + y * stride;
+        if (memcmp(target, source, LCD_COLUMNS / 8)) {
+            memcpy(target, source, LCD_COLUMNS / 8);
+            if (first < 0) first = y;
+            changed = true;
+        } else if (first >= 0) {
+            pd->graphics->markUpdatedRows(first, y - 1);
+            first = -1;
+        }
+    }
+    if (first >= 0) pd->graphics->markUpdatedRows(first, LCD_ROWS - 1);
+    return changed;
 }
 static int update(void *context) {
     (void)context;
@@ -385,7 +423,7 @@ static int update(void *context) {
     if (pairing_active()) {
         net_tick();
         enum PairingResult result = pairing_update(pressed);
-        if (result == PAIRING_RUNNING) { pairing_draw(small_font); return 1; }
+        if (result == PAIRING_RUNNING) return render(draw_setup);
         if (result == PAIRING_APPLIED) {
             reset_profile(); screen = config.use_tailnet ? SCREEN_AUTH : SCREEN_SESSIONS;
             error[0] = 0;
@@ -401,12 +439,7 @@ static int update(void *context) {
     }
     if (!settings_ready()) {
         if (setup_requested || (pressed & kButtonA)) { setup_requested = false; receive_setup(); }
-        if (pairing_active()) pairing_draw(small_font);
-        else {
-            pd->graphics->clear(kColorWhite); pd->graphics->setFont(small_font);
-            text(error[0] ? error : "Set up Evener\n\nOpen Evener Settings on your phone or computer, then press A here to receive setup.", 12, 38, 376, 170);
-        }
-        return 1;
+        return render(draw_setup);
     }
     if (!error[0] && !permissions_ready && !permission_pending) {
         enum accessReply reply = kAccessAsk;
@@ -433,14 +466,15 @@ static int update(void *context) {
                     }
                     else snprintf(error, sizeof(error), "Could not finish saving the new identity. Press A to retry. Your drafts are kept.");
                 }
-                draw_authorization(); return 1;
+                return render(draw_authorization);
             }
             if (config.use_tailnet) tailnet_device_update();
             hub_update();
             if ((pressed & kButtonB) || hub_ready) screen = SCREEN_SESSIONS;
             else {
                 if (pressed & kButtonA) reconnect(NULL);
-                recover_network(); draw_authorization(); return 1;
+                if (recover_network()) return 0;
+                return render(draw_authorization);
             }
         }
         if ((pressed & kButtonA) && (screen == SCREEN_TRANSCRIPT ||
@@ -449,7 +483,7 @@ static int update(void *context) {
             pressed &= ~kButtonA;
         }
         bool send_review = screen == SCREEN_COMPOSER && (pressed & kButtonA) &&
-            draft.state == DRAFT_READY && (!recording_started || final_saved) &&
+            draft.state == DRAFT_READY && !hub_send_pending() && (!recording_started || final_saved) &&
             voice_state != VOICE_RECORDING && voice_state != VOICE_FINISHING;
         if (!(held & kButtonA) && voice_state == VOICE_RECORDING) voice_finish();
         char focused[REF_CAPACITY] = "";
@@ -509,7 +543,7 @@ static int update(void *context) {
                 if (voice_state == VOICE_RECORDING) voice_finish();
                 else {
                     if (recording_started && !save_voice()) {
-                        draw(); return 1;
+                        return render(draw);
                     }
                     voice_close(); refresh_saved_audio(); screen = SCREEN_TRANSCRIPT; recording_started = false; reset_scroll();
                 }
@@ -542,9 +576,8 @@ static int update(void *context) {
             if (screen == SCREEN_TRANSCRIPT && scroll >= content_height - CONTENT_HEIGHT && (move > 0 || (direction & kButtonDown))) follow = true;
         }
     }
-    recover_network();
-    draw();
-    return 1;
+    if (recover_network()) return 0;
+    return render(draw);
 }
 #ifdef _WINDLL
 __declspec(dllexport)
@@ -562,6 +595,8 @@ int eventHandler(PlaydateAPI *playdate, PDSystemEvent event, uint32_t arg) {
         const char *reason = NULL;
         font = pd->graphics->loadFont("/System/Fonts/Roobert-10-Bold.pft", &reason);
         small_font = pd->graphics->loadFont("fonts/Nontendo-Light", &reason);
+        canvas = pd->graphics->newBitmap(LCD_COLUMNS, LCD_ROWS, kColorWhite);
+        if (!canvas) app_log("Could not allocate the offscreen display buffer");
         pd->display->setRefreshRate(30);
         pd->system->setUpdateCallback(update, NULL);
         pd->system->addMenuItem("Discard draft", discard, NULL);

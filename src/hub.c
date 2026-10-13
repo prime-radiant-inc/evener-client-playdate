@@ -18,7 +18,8 @@ int chat_count, chat_revision;
 char selected_ref[REF_CAPACITY], selected_title[160], session_status[32], hub_status[256];
 bool hub_ready, hub_loading, hub_has_older, hub_hydrated;
 
-enum Request { REQUEST_NONE, REQUEST_INIT, REQUEST_NAV, REQUEST_READ, REQUEST_OLDER, REQUEST_SEND, REQUEST_RESUME };
+enum Request { REQUEST_NONE, REQUEST_INIT, REQUEST_NAV, REQUEST_READ, REQUEST_OLDER, REQUEST_SEND, REQUEST_RESUME, REQUEST_PREPARE_SEND };
+enum { HISTORY_PAGE_ITEMS = 8 };
 static WebSocket socket;
 static enum Request pending;
 static unsigned serial, request_id, browse_generation, requested_browse;
@@ -27,13 +28,19 @@ static char incarnation[128], boot_generation[128], instance[128];
 static int epoch, requested_offset, retry_delay = 1;
 static float request_time, reconnect_at, browse_at, cache_at;
 static int saved_revision = -1;
-static bool initialized, want_browse, want_read, want_older, want_send, replay_allowed;
+static bool initialized, want_browse, want_read, want_older, want_send, replay_allowed, send_prepared;
 static bool can_send, can_queue, resume_required, resume_foldable, suspended, rebase_older, replace_chat;
 static char outgoing[57344], quoted_text[DRAFT_CAPACITY * 6 + 3];
 static char text_buffer[32768], reading_anchor[192];
 
 static bool same(const char *a, const char *b) { return strcmp(a, b) == 0; }
 static void status(const char *message) { snprintf(hub_status, sizeof(hub_status), "%s", message); }
+static void connected_status(void) {
+    if (want_send) status("Preparing to send...");
+    else if (draft.state == DRAFT_UNCERTAIN) status("Checking delivery...");
+    else if (selected_ref[0] && (!hub_hydrated || want_read)) status("Loading conversation...");
+    else status("Connected");
+}
 static void save_chat(void) {
     if (hub_hydrated && selected_ref[0] && saved_revision != chat_revision) {
         if (cache_save_chat()) saved_revision = chat_revision;
@@ -180,7 +187,7 @@ static void navigation_result(const Json *j, int result) {
     navigation_offset = requested_offset;
     navigation_revision++;
     if (!cache_save_navigation()) app_log("Could not save session list cache");
-    status("Connected");
+    connected_status();
 }
 static void read_result(const Json *j, int result, bool backfill) {
     if (!same(request_ref, selected_ref)) return;
@@ -210,7 +217,7 @@ static void read_result(const Json *j, int result, bool backfill) {
     hub_has_older = older_cursor[0] != 0;
     if (hub_has_older && chat_count < 4) want_older = true;
     if (draft.state == DRAFT_UNCERTAIN && replay_allowed) want_send = true;
-    status(draft.state == DRAFT_UNCERTAIN ? "Checking delivery..." : "Connected");
+    connected_status();
 }
 static void submission_result(const Json *j, int result, int error) {
     static Draft current;
@@ -278,6 +285,8 @@ static void message(WebSocket *ws, const char *text, size_t length) {
     if (method >= 0 && id < 0) notification(&j, method, json_get(&j, 0, "params"));
     else if (id >= 0 && pending != REQUEST_NONE && (unsigned)json_int(&j, id) == request_id) {
         enum Request completed = pending; pending = REQUEST_NONE; hub_loading = false;
+        app_log("Hub request %u completed; kind %d; %lu bytes; %u ms", request_id, completed,
+            (unsigned long)length, (unsigned)((app_time() - request_time) * 1000));
         int result = json_get(&j, 0, "result"), error = json_get(&j, 0, "error");
         if (completed == REQUEST_SEND) submission_result(&j, result, error);
         else if (error >= 0) {
@@ -289,8 +298,14 @@ static void message(WebSocket *ws, const char *text, size_t length) {
             if (json_is(&j, json_get(&j, result, "protocolVersion"), "evener-appwire-v7")) initialized = true;
             else status("Hub protocol version is not supported");
         } else if (completed == REQUEST_NAV) navigation_result(&j, result);
-        else if (completed == REQUEST_READ || completed == REQUEST_OLDER) read_result(&j, result, completed == REQUEST_OLDER);
-        else if (completed == REQUEST_RESUME) { want_read = true; hub_hydrated = false; }
+        else if (completed == REQUEST_PREPARE_SEND) {
+            if (same(request_ref, selected_ref)) {
+                thread_metadata(&j, json_get(&j, result, "thread"));
+                send_prepared = true;
+                connected_status();
+            }
+        } else if (completed == REQUEST_READ || completed == REQUEST_OLDER) read_result(&j, result, completed == REQUEST_OLDER);
+        else if (completed == REQUEST_RESUME) { want_read = true; hub_hydrated = send_prepared = false; }
     }
     json_free(&j);
 }
@@ -308,7 +323,7 @@ void hub_close(void) {
     save_chat();
     suspended = true;
     ws_close(&socket);
-    hub_ready = hub_hydrated = initialized = false;
+    hub_ready = hub_hydrated = initialized = send_prepared = false;
     pending = REQUEST_NONE;
     if (draft.state == DRAFT_SENDING) { draft.state = DRAFT_UNCERTAIN; draft_save(); }
 }
@@ -316,9 +331,10 @@ void hub_connect(void) {
     suspended = false;
     ws_connect(&socket, config.hub_host, config.hub_port, config.hub_tls, config.hub_path,
         config.hub_token, 2097152, message);
-    hub_ready = hub_hydrated = initialized = replay_allowed = false;
+    hub_ready = hub_hydrated = initialized = replay_allowed = send_prepared = false;
     pending = REQUEST_NONE;
     want_browse = true; want_read = selected_ref[0] != 0;
+    if (draft.state == DRAFT_UNCERTAIN) want_send = true;
     if (!navigation_count) cache_load_navigation();
     status(config.use_tailnet ? tailnet_device_status() :
         navigation_count || chat_count ? "Connecting... Saved content available." : "Connecting to Evener...");
@@ -330,7 +346,7 @@ void hub_reset_profile(void) {
     navigation_count = navigation_offset = navigation_remaining = browse_tier = 0;
     browse_kind = BROWSE_LIVE; browse_project[0] = browse_title[0] = 0;
     navigation_revision++; browse_generation++;
-    want_read = want_older = want_send = replay_allowed = false;
+    want_read = want_older = want_send = replay_allowed = send_prepared = false;
     can_send = can_queue = resume_required = resume_foldable = replace_chat = rebase_older = false;
     hub_ready = hub_loading = hub_has_older = hub_hydrated = initialized = false;
     pending = REQUEST_NONE; saved_revision = -1; retry_delay = 1; reconnect_at = browse_at = cache_at = 0;
@@ -350,7 +366,7 @@ bool hub_select(const NavigationRow *row) {
     snprintf(selected_ref, sizeof(selected_ref), "%s", row->ref);
     snprintf(selected_title, sizeof(selected_title), "%s", row->title);
     clear_chat(); incarnation[0] = older_cursor[0] = session_status[0] = reading_anchor[0] = 0;
-    hub_hydrated = hub_has_older = replay_allowed = false;
+    hub_hydrated = hub_has_older = replay_allowed = send_prepared = false;
     replace_chat = false;
     if (cache_load_chat()) { replace_chat = true; status("Saved conversation; updating..."); }
     want_read = true; want_older = want_send = false;
@@ -381,11 +397,13 @@ void hub_latest(void) { save_chat(); replace_chat = true; want_read = true; want
 void hub_recheck(void) { want_read = selected_ref[0] != 0; if (!hub_ready) reconnect_at = 0; }
 bool hub_send_pending(void) { return want_send; }
 void hub_send(void) {
-    if (draft.state == DRAFT_READY && draft.text[0]) { want_send = true; want_read = true; status("Preparing to send..."); }
+    if (draft.state == DRAFT_READY && draft.text[0] && !want_send) {
+        want_send = true; send_prepared = false; status("Preparing to send...");
+    }
 }
 static void send_draft(void) {
     static char ref[REF_CAPACITY * 6 + 3], expected[128 * 6 + 3], params[55000];
-    if (!hub_hydrated || !same(draft.ref, selected_ref)) return;
+    if (!send_prepared || !same(draft.ref, selected_ref)) return;
     if (draft.state == DRAFT_UNCERTAIN && !replay_allowed) { want_send = false; return; }
     if (draft.state == DRAFT_READY) {
         if (resume_required && !resume_foldable) {
@@ -420,6 +438,8 @@ void hub_update(void) {
     ws_update(&socket);
     if (socket.state == WS_FAILED || (pending && app_time() - request_time > 35)) {
         if (socket.state == WS_FAILED) app_log("Hub disconnected: %s", socket.error);
+        if (pending) app_log("Hub request %u interrupted; kind %d; %lu buffered bytes; %u ms", request_id,
+            pending, (unsigned long)socket.message_length, (unsigned)((app_time() - request_time) * 1000));
         hub_close(); suspended = false;
         reconnect_at = app_time() + retry_delay;
         retry_delay = retry_delay < 16 ? retry_delay * 2 : 16;
@@ -432,19 +452,26 @@ void hub_update(void) {
         return;
     }
     if (!hub_ready) {
-        if (ws_send(&socket, "{\"method\":\"initialized\",\"params\":{}}")) { hub_ready = true; retry_delay = 1; status("Connected"); }
+        if (ws_send(&socket, "{\"method\":\"initialized\",\"params\":{}}")) { hub_ready = true; retry_delay = 1; connected_status(); }
         return;
     }
     static char params[16384], ref[REF_CAPACITY * 6 + 3]; json_quote(selected_ref, ref, sizeof(ref));
-    if (want_read) {
-        snprintf(params, sizeof(params), "{\"ref\":%s,\"includeTurns\":true,\"subscribe\":true,\"replaceSubscription\":true,\"itemLimit\":24}", ref);
+    if (want_send) {
+        // Session metadata carries capabilities and mutation authority without
+        // downloading conversation history again before dispatch or recovery.
+        if (send_prepared) send_draft();
+        else {
+            snprintf(params, sizeof(params), "{\"ref\":%s,\"includeTurns\":false}", ref);
+            request(REQUEST_PREPARE_SEND, "thread/read", params);
+        }
+    } else if (want_read) {
+        snprintf(params, sizeof(params), "{\"ref\":%s,\"includeTurns\":true,\"subscribe\":true,\"replaceSubscription\":true,\"itemLimit\":%d}", ref, HISTORY_PAGE_ITEMS);
         if (request(REQUEST_READ, "thread/read", params)) want_read = false;
-    } else if (want_send) send_draft();
-    else if (want_older && hub_has_older) {
+    } else if (want_older && hub_has_older) {
         static char cursor[12291]; json_quote(older_cursor, cursor, sizeof(cursor));
         if (rebase_older && chat_count && !chat[0].overlay)
-            snprintf(params, sizeof(params), "{\"ref\":%s,\"cursor\":%s,\"before\":{\"entry\":%d,\"item\":%d,\"sub\":%d},\"itemLimit\":24}", ref, cursor, chat[0].entry, chat[0].item, chat[0].sub);
-        else snprintf(params, sizeof(params), "{\"ref\":%s,\"cursor\":%s,\"itemLimit\":24}", ref, cursor);
+            snprintf(params, sizeof(params), "{\"ref\":%s,\"cursor\":%s,\"before\":{\"entry\":%d,\"item\":%d,\"sub\":%d},\"itemLimit\":%d}", ref, cursor, chat[0].entry, chat[0].item, chat[0].sub, HISTORY_PAGE_ITEMS);
+        else snprintf(params, sizeof(params), "{\"ref\":%s,\"cursor\":%s,\"itemLimit\":%d}", ref, cursor, HISTORY_PAGE_ITEMS);
         if (request(REQUEST_OLDER, "thread/turns/list", params)) want_older = false;
     } else if (want_browse && app_time() >= browse_at) {
         const char *tiers[] = {"current", "recent", "archived"};

@@ -163,7 +163,7 @@ static bool socket_open(Channel *channel, const char *host, int port) {
     channel->opened = tn_now_ms();
     return channel->socket != NULL;
 }
-static bool pump(Channel *channel, bool control) {
+static bool flush_output(Channel *channel, bool control) {
     for (unsigned budget = 0; budget < 8 && net_state(channel->socket) == NS_OPEN; budget++) {
         size_t count;
         const uint8_t *bytes = control ? control_output(&count) : tn_output(&count);
@@ -174,6 +174,16 @@ static bool pump(Channel *channel, bool control) {
         if (!n) break;
         if (control) control_consume((size_t)n); else tn_consume((size_t)n);
     }
+    return true;
+}
+void tailnet_device_flush(void) {
+    // Draining Hub bytes returns TCP receive credit. Send that credit during
+    // the same game update instead of leaving the peer waiting another frame.
+    if (!maintenance && !relay_pinning && relay.started && net_state(relay.socket) == NS_OPEN &&
+        !flush_output(&relay, false)) tn_fail(net_error(relay.socket));
+}
+static bool pump(Channel *channel, bool control) {
+    if (!flush_output(channel, control)) return false;
     for (unsigned budget = 0; budget < 16; budget++) {
         if (channel->offset < channel->length) {
             const uint8_t *bytes = channel->input + channel->offset;

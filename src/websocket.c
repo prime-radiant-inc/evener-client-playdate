@@ -300,5 +300,6 @@ void ws_update(WebSocket *ws) {
         ws->last_received = now;
         for (int i = 0; i < n && ws->state != WS_FAILED; i++) receive_byte(ws, bytes[i]);
     }
+    if (ws->tunneled) tailnet_device_flush();
     if (ws->peer_closed && !available(ws)) failed(ws, ws->tunneled ? "Tailnet connection closed" : net_error(ws->connection));
 }
