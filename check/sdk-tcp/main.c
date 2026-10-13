@@ -14,7 +14,7 @@ static LCDFont *font;
 static bool requested, allowed, started, connected, closed, done, passed;
 static bool download_only, fence_writes, worker_pending, cleanup_queued;
 static bool split, sender_requested, sender_allowed, sender_started, sender_connected, sender_closed;
-static bool restart_on_stall, block_writes, pressure_fence;
+static bool restart_on_stall, block_writes, pressure_fence, restarting;
 static size_t pressure_pending;
 static float pressure_progress, pressure_fence_at;
 static unsigned char pressure[4096];
@@ -88,7 +88,7 @@ static void restart_download(const char *event) {
     static char arguments[288];
     report(event);
     snprintf(arguments, sizeof(arguments), "%s download", host);
-    done = cleanup_queued = true;
+    done = cleanup_queued = restarting = true;
     snprintf(result, sizeof(result), "Restarting into download control");
     pd->system->restartGame(arguments);
 }
@@ -183,6 +183,7 @@ static void open_connection(TCPConnection **target, int port) {
 
 static int update(void *context) {
     (void)context;
+    if (restarting) return 0;
     if (!requested && !done) {
         requested = true;
         enum accessReply reply = tcp->requestAccess(host, PORT, false,
@@ -206,6 +207,7 @@ static int update(void *context) {
         open_connection(&connection, PORT);
     }
     if ((started || sender_started) && !done) pump();
+    if (restarting) return 0;
     if (done && !cleanup_queued && !worker_pending) {
         cleanup_queued = true;
         pd->network->setEnabled(true, close_after_worker);
@@ -238,6 +240,7 @@ __declspec(dllexport)
 #endif
 int eventHandler(PlaydateAPI *api, PDSystemEvent event, uint32_t arg) {
     (void)arg;
+    if (restarting) return 0;
     if (event == kEventInit) {
         pd = api;
         tcp = pd->network->tcp;

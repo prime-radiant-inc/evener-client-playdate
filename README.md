@@ -169,8 +169,10 @@ build writes `.su` stack-usage reports and rejects individual frames above
   reconcile through a fresh Hub read. The fallback uses no additional socket:
   DERP and direct transcription retain one TLS slot each. Acoustic pairing and
   identity replacement are not automatically restarted. Repeated stalled-worker
-  recovery remains under qualification because SDK teardown can encounter a
-  firmware allocator fault; see the [hardware evidence](docs/qualification/2026-10-13-runtime-recovery.md).
+  recovery has failed in a standalone SDK probe with firmware allocator faults.
+  The fallback remains experimental and cannot guarantee recovery; see the
+  [SDK reproductions](docs/qualification/sdk-network-report.md) and
+  [client hardware evidence](docs/qualification/2026-10-13-runtime-recovery.md).
   Queued admission does not consume connection deadlines.
   `random.c` combines a private build seed with a durably advanced launch counter
   to supply cryptographic nonces across relaunches.

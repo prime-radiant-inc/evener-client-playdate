@@ -65,9 +65,15 @@ those writes. Capture both sides and compare the exact byte counts.
 The app keeps its TCP objects for their whole runtime. At the end it queues a
 worker callback before closing, and never releases the object while a worker
 might retain it. Restart modes let the SDK tear down the runtime without local
-close/release. That cleanup happens after the measured outcome. All modes
+close/release. Update and system-event processing return after the restart
+request without further rendering or cleanup scheduling. Asynchronous callbacks
+remain installed. That cleanup happens after the measured outcome. All modes
 use static input/output buffers and a 64 KiB SDK read buffer. Empty availability
 polls do not issue zero-length reads.
 
 These checks are opt-in hardware diagnostics, not part of default tests.
 See [the recorded hardware observations](../../docs/qualification/2026-10-12-sdk-tcp.md).
+
+Repeated blocked-write recovery can fault inside firmware allocation cleanup;
+see the [credential-free SDK report](../../docs/qualification/sdk-network-report.md).
+One successful restarted transfer does not qualify repeated recovery.

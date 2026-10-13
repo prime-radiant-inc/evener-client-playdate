@@ -76,3 +76,20 @@ changed during this final check.
 Private saved-data backups, configured binaries and raw captures stay outside
 Git. Host storage/socket/recovery checks and ARM/Simulator build evidence are
 recorded in the earlier investigation; no source code changed for this run.
+
+## Follow-up: repeated SDK recovery
+
+A later isolated SDK investigation reproduced a callback into unloaded game code
+in Simulator 3.1.2. Its hardware callback control completed five ordinary runtime
+restarts. Repeated blocked-write recovery failed separately on physical firmware:
+one full-MiB recovery passed, then the second attempt faulted in the firmware
+allocator. A guarded probe that stopped post-request rendering and system-event
+work produced the same pass-then-fault sequence. See the [minimal reproductions,
+registers and diagnosis boundaries](sdk-network-report.md).
+
+These failures came from separate credential-free diagnostic apps. The installed
+Evener executable and all 62 saved-data files were unchanged through the probes.
+They supersede the earlier open question about qualification: repeated forced
+runtime recovery has failed, so the workaround remains experimental and the PR
+remains a draft. The earlier successful client voice/send observations still
+stand, but do not establish recovery reliability.

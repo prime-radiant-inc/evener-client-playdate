@@ -188,9 +188,11 @@ was omitted, once the worker confirms completion. If the SDK worker itself stops
 processing commands, the queued API cannot cancel it. The experimental runtime
 recovery fallback waits thirty seconds after stalled retirement, saves work and
 calls the SDK's runtime restart. Repeated recovery from stalled SDK workers
-remains under qualification; the SDK's teardown can encounter a firmware allocator
-fault. See the [qualification record](qualification/2026-10-13-runtime-recovery.md)
-for exercised recovery and voice-delivery boundaries.
+has failed in a standalone probe with firmware allocator faults, so this
+experimental fallback cannot guarantee recovery. See the
+[SDK reproductions](qualification/sdk-network-report.md) and
+[qualification record](qualification/2026-10-13-runtime-recovery.md) for the
+separate SDK and client voice-delivery boundaries.
 It restores the current conversation or navigation page, scroll/follow state
 and composer. A send requested before dispatch resumes preparation; a dispatched
 send retains its durable mutation identity and requires the existing
