@@ -93,3 +93,35 @@ They supersede the earlier open question about qualification: repeated forced
 runtime recovery has failed, so the workaround remains experimental and the PR
 remains a draft. The earlier successful client voice/send observations still
 stand, but do not establish recovery reliability.
+
+## Post-probe client run
+
+The unchanged installed client returned to the dedicated verification
+conversation and completed native control, DERP, WireGuard and a fresh Hub read.
+A DERP write then stalled at 117 pending bytes before the new recording began.
+The microphone still started synchronously; the voice connection was requested
+35 ms later with 232 samples already captured. After a 16.016-second hold, the
+client saved the whole recording and performed one automatic runtime restart.
+It restored the composer and replayed all 127,988 audio bytes. This run did not
+show captions during the original hold; its first caption came after replay.
+
+The provider eventually produced final text and the client durably saved a
+`DRAFT_READY` record. Its on-disk checksum, version and state were checked after
+the run. The text did not reproduce the entire spoken fixture, so this is not
+a transcription-fidelity pass. The audio was removed only after final text had
+been saved. No send button was pressed, and authoritative Hub readback was
+unchanged: no partial or duplicate message was submitted.
+
+The client subsequently added a firmware allocator fault at UTC 16:55:40:
+PC `0x080619c4` (bundled hardware-ID-0 symbols: `malloc_consolidate`), LR zero,
+BFAR `0x0000ac88`. Complete screen captures stopped arriving. This is a failed
+client run even though the draft survived. The captured allocator site alone
+does not establish the corruption origin or prove it is the same fault as the
+standalone blocked-write failure.
+
+The latest 62 saved-data files, including the finalized test draft, were backed
+up and hash-verified. The error log remained unchanged; the crash log contains
+the two standalone faults and this client fault. At this checkpoint macOS's
+locked loginwindow refused safe ejection, so reopening the surviving review and
+its separate-send check remain pending an unlock. The device is safely mounted;
+no forced ejection, credential reset, firmware change or server change was used.
