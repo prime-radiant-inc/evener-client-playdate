@@ -25,7 +25,7 @@ def connection_info(connection):
             "send_buffer_bytes": struct.unpack_from("=I", info, 32)[0]}
 
 
-def serve(connection, peer, chunk_bytes, interval):
+def serve(connection, peer, chunk_bytes, interval, expected_receipts):
     connection.setblocking(False)
     started = time.monotonic()
     next_send = started
@@ -36,7 +36,7 @@ def serve(connection, peer, chunk_bytes, interval):
     bad_bytes = 0
     outcome = "timeout"
     report("connected", peer=peer, chunk_bytes=len(chunk), interval_ms=interval * 1000, expected_tx=TOTAL_BYTES,
-           receipt_bytes=RECEIPT_BYTES, limit_seconds=LIMIT_SECONDS)
+           receipt_bytes=RECEIPT_BYTES, expected_receipts=expected_receipts, limit_seconds=LIMIT_SECONDS)
     while time.monotonic() - started < LIMIT_SECONDS:
         before_select = time.monotonic()
         ready_to_send = sent < TOTAL_BYTES and before_select >= next_send
@@ -64,7 +64,7 @@ def serve(connection, peer, chunk_bytes, interval):
                 received += len(data)
                 bad_bytes += sum(byte != RECEIPT_BYTE for byte in data)
                 last_receive = now
-                if received > TOTAL_BYTES:
+                if received > expected_receipts * RECEIPT_BYTES:
                     outcome = "receipt_limit"
                     break
         if writable:
@@ -87,8 +87,8 @@ def serve(connection, peer, chunk_bytes, interval):
                    tx_idle=round(now - last_send, 3), rx_idle=round(now - last_receive, 3),
                    **connection_info(connection))
             next_report = now + 1
-    passed = (outcome == "eof" and sent == TOTAL_BYTES and received > 0
-              and received % RECEIPT_BYTES == 0 and bad_bytes == 0)
+    passed = (outcome == "eof" and sent == TOTAL_BYTES
+              and received == expected_receipts * RECEIPT_BYTES and bad_bytes == 0)
     report("PASS" if passed else "FAIL", outcome=outcome, seconds=round(time.monotonic() - started, 3),
            tx=sent, rx=received, receipts=received // RECEIPT_BYTES,
            receipt_remainder=received % RECEIPT_BYTES, bad_bytes=bad_bytes, send_calls=send_calls)
@@ -99,6 +99,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bind", default="127.0.0.1", help="LAN address reachable from the Playdate")
     parser.add_argument("--port", type=int, default=19184, help="nonprivileged port; must match main.c")
+    parser.add_argument("--receipts", type=int, choices=(1, 10), default=10,
+                        help="expected receipt count: 1 for download, 10 for duplex/fence")
     parser.add_argument("--chunk", type=int, default=16384)
     parser.add_argument("--interval-ms", type=float, default=0)
     args = parser.parse_args()
@@ -118,7 +120,7 @@ def main():
             report("FAIL", outcome="no_connection")
             return 1
         with connection:
-            return 0 if serve(connection, peer, args.chunk, args.interval_ms / 1000) else 1
+            return 0 if serve(connection, peer, args.chunk, args.interval_ms / 1000, args.receipts) else 1
 
 
 if __name__ == "__main__":

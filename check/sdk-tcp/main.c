@@ -95,7 +95,8 @@ static void pump(void) {
         last_read = time;
         if (received > TOTAL) { finish(false, "Excess input"); return; }
     }
-    if ((!download_only || received == TOTAL) && writes < (download_only ? 1u : RECEIPTS)
+    unsigned expected_writes = download_only ? 1u : RECEIPTS;
+    if ((!download_only || received == TOTAL) && writes < expected_writes
             && tcp->getSentBytesPending(connection) == 0) {
         int written = tcp->write(connection, receipt, sizeof(receipt));
         if (written != sizeof(receipt)) { finish(false, "SDK write did not accept receipt"); return; }
@@ -106,7 +107,7 @@ static void pump(void) {
             pd->network->setEnabled(true, write_finished);
         }
     }
-    if (received == TOTAL && writes && !worker_pending && tcp->getSentBytesPending(connection) == 0) {
+    if (received == TOTAL && writes == expected_writes && !worker_pending && tcp->getSentBytesPending(connection) == 0) {
         finish(true, "One MiB verified");
         return;
     }

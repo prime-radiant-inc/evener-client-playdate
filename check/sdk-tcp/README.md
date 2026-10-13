@@ -5,7 +5,8 @@ Evener's socket adapter, DERP, WireGuard, TLS, audio or provider code. It contai
 no credentials and reads no Evener configuration or saved data.
 
 The Mac server sends one MiB of a fixed byte. The device verifies every byte and
-sends fixed 117-byte receipts. The server verifies every receipt byte. A device
+sends fixed 117-byte receipts. The server verifies every receipt byte and the
+exact expected count. A device
 PASS establishes the download; compare the transmitted count with the server's
 received count as well. Server `send` counts alone do not establish delivery.
 
@@ -37,7 +38,9 @@ accept/transfer wait is 120 seconds. TCP window diagnostics use macOS's
 The launch modes are:
 
 - `duplex`: send ten receipts while receiving; at most one pending write.
-- `download`: receive the complete MiB before sending one receipt.
+- `download`: receive the complete MiB before sending one receipt; start the
+  server with `--receipts 1` for this control. The server defaults to ten receipts
+  for `duplex` and `fence`.
 - `fence`: like duplex, but wait for a queued `network.setEnabled(true)` callback
   after each write before reading or writing again. SDK 3.1.2 dispatches that
   operation on the same worker; it is an implementation-specific ordering check.
