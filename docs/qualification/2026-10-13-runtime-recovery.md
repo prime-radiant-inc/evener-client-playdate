@@ -121,7 +121,23 @@ standalone blocked-write failure.
 
 The latest 62 saved-data files, including the finalized test draft, were backed
 up and hash-verified. The error log remained unchanged; the crash log contains
-the two standalone faults and this client fault. At this checkpoint macOS's
-locked loginwindow refused safe ejection, so reopening the surviving review and
-its separate-send check remain pending an unlock. The device is safely mounted;
-no forced ejection, credential reset, firmware change or server change was used.
+the two standalone faults and this client fault.
+
+After the Mac was unlocked and the device safely ejected, the client reopened
+the saved review text and reconnected through Tailscale. A subsequent 117-byte
+DERP write stalled. One separate send-button press did not result in a Hub
+submission; the app requested another automatic runtime restart and restored
+the same `DRAFT_READY` review. It authenticated again and requested `thread/read`,
+then stalled on another 117-byte DERP write before a send retry could be made.
+The retry was stopped without another send press. Authoritative Hub readback
+remained byte-identical to the pre-run result. The saved text survived, but the
+post-crash separate-send check failed to complete; it is not a delivery pass.
+
+The final backup contains all 62 saved-data files. The test draft remains
+byte-identical to its post-transcription copy, with a valid checksum and
+`DRAFT_READY` state; the installed executable hash is unchanged. The final crash
+and error logs match the post-transcription copies (7,970 and 814 bytes), so no
+additional logged fault occurred during this send/reconnect check. Both temporary
+probe bundles are absent. After safe ejection, a captured screen confirmed the
+device was back at the launcher, outside the failing client recovery loop.
+No forced ejection, credential reset, firmware change or server change was used.

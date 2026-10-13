@@ -119,6 +119,28 @@ public cancellation API. At restart, both the pending write and callback must
 still be outstanding. The new connection must download exactly 1,048,576 bytes
 and deliver exactly 117 valid receipt bytes.
 
+Each `blocked` launch performs one pressure phase and one automatic restart into
+`download`; pressure cycles do not repeat automatically. To reproduce the
+repeated sequence:
+
+1. Wait for both the device and server to report `PASS`, then let the server
+   process exit normally. Its exit closes the first, unread pressure connection.
+2. Keep the device powered and in the completed `RawTCP` app. Do not reboot,
+   enter USB storage mode or relaunch another app between cycles.
+3. Start a fresh server process with the same `--block-first --receipts 1`
+   command above, and wait for its `listening` event.
+4. Issue the same `run /Games/RawTCP.pdx YOUR_MAC_LAN_IP blocked` command again
+   through the SDK USB console. Allow local network permission if requested.
+   This second launch starts a new pressure phase in the same device boot.
+5. Stop the sequence on any crash or failed transfer and collect the device
+   crash log before trying another variant.
+
+The recorded sequences used 42-second USB captures per cycle; the passing first
+transfer and host process had finished before the next server and app launch.
+There was no device reboot or storage-mode transition between cycles one and
+two. Both the original probe and the guarded comparison below used this same
+server-reset and app-relaunch procedure.
+
 On October 13, the first repeated-pressure cycle passed. It restarted with
 4,096 pending bytes, SDK error zero, and the worker callback outstanding. The
 post-restart transfer verified the full MiB and one receipt. The second cycle
