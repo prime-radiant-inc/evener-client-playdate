@@ -185,8 +185,26 @@ handle, then confirms close completion before releasing the object and admitting
 its replacement. Neither a zero pending counter nor a server-close notification
 establishes completion. A timed-out open can retire even when its own callback
 was omitted, once the worker confirms completion. If the SDK worker itself stops
-processing commands, the queued API cannot cancel it; cached content and saved
-input remain available, but a device restart may be needed to restore networking.
+processing commands, the queued API cannot cancel it. The experimental runtime
+recovery fallback waits thirty seconds after stalled retirement, saves work and
+calls the SDK's runtime restart. Its production lifecycle remains unqualified:
+an initial hardware run recovered successfully, but a later restart faulted in
+the firmware allocator. See the [qualification record](qualification/2026-10-12-sdk-tcp.md#runtime-recovery-integration).
+It restores the current conversation or navigation page, scroll/follow state
+and composer. A send requested before dispatch resumes preparation; a dispatched
+send retains its durable mutation identity and requires the existing
+reconciliation before replay. Cached reading remains available during recovery.
+
+Automatic relaunch is spaced at least sixty seconds apart. It waits while the
+microphone is recording and while accepted audio remains unsaved, so holding A
+continues to capture speech. A failed draft or audio save defers relaunch.
+An interrupted transcription replays its saved audio after returning to the
+composer. Acoustic pairing and identity replacement keep their existing
+explicit retry flow rather than losing temporary setup state to a restart.
+After requesting restart, application updates, menu actions and lifecycle
+callbacks leave teardown to the SDK. The fallback does not allocate another
+socket: one TLS slot belongs to DERP and the other to direct transcription.
+
 The device needs exclusive networking
 resources to open its Tailscale connections: maintenance pauses the relay across
 its key fetch and authenticated map request, then automatically restores Hub reading.

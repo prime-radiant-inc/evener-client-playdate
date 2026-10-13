@@ -28,3 +28,7 @@ build/check/storage: check/storage.c $(CHECK_STORAGE)
 build/check/receiver: check/receiver.c check/network.c $(CHECK_STORAGE) src/pairing.c src/pairing_http.c src/chirp.c src/audio.c vendor/qrcodegen/qrcodegen.c
 	@mkdir -p $(@D)
 	$(CC) $(CHECK_CFLAGS) -DTARGET_EXTENSION=1 -I$(PLAYDATE_SDK_PATH)/C_API -Isrc -Ivendor/tweetnacl -Ivendor/qrcodegen $^ -lm -o $@
+
+build/check/hub-recovery: check/hub_recovery.c $(CHECK_STORAGE) src/hub.c src/cache.c
+	@mkdir -p $(@D)
+	$(CC) $(CHECK_CFLAGS) -DTARGET_EXTENSION=1 -I$(PLAYDATE_SDK_PATH)/C_API -Isrc -Ivendor/tweetnacl $^ -o $@

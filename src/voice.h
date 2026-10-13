@@ -11,6 +11,10 @@ void voice_update(void);
 bool voice_start(void);
 void voice_finish(void);
 void voice_close(void);
+// Check after capture stops and voice_update has drained pending audio.
+bool voice_audio_saved(void);
+// Persist and close audio without queueing network work during SDK teardown.
+bool voice_prepare_restart(void);
 // Termination has no later game-loop frames: persist every accepted sample.
 bool voice_terminate(void);
 void voice_discard(void);

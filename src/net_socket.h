@@ -12,6 +12,8 @@ void net_tick(void);
  * completed its worker commands and was released, permitting exclusive use. */
 bool net_waiting(const NetSocket *socket);
 bool net_idle(void);
+/* A retired SDK handle has failed to finish cleanup for thirty seconds. */
+bool net_recovery_needed(void);
 enum NetState net_state(const NetSocket *socket);
 const char *net_error(const NetSocket *socket);
 size_t net_available(const NetSocket *socket);

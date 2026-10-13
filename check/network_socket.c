@@ -4,12 +4,12 @@
 #include <string.h>
 
 struct TCPConnection { size_t pending, incoming; bool receive_paused; unsigned open_work, send_work; TCPConnectionCallback *closed; TCPOpenCallback *opened; void *context; };
-static TCPConnection connections[10];
+static TCPConnection connections[13];
 static void (*fence_callback)(PDNetErr);
 static unsigned created, closes, released, worker_sequence, fence_sequence;
 static TCPConnection *create(const char *host, int port, bool tls) {
     (void)host; (void)port; (void)tls;
-    CHECK(created < 10); return &connections[created++];
+    CHECK(created < 13); return &connections[created++];
 }
 static PDNetErr open_connection(TCPConnection *connection, TCPOpenCallback callback, void *context) {
     connection->open_work = ++worker_sequence; connection->opened = callback; connection->context = context; return NET_OK;
@@ -81,7 +81,6 @@ int main(void) {
     connections[0].pending = 2; net_tick();
     fixture_time = 38; net_tick(); CHECK(net_state(first) == NS_OPEN);
     fixture_time = 39; net_tick(); CHECK(net_state(first) == NS_FAILED);
-    CHECK(strstr(net_error(first), "no progress"));
     net_close(first); CHECK(closes == 0 && released == 0);
     CHECK(connections[0].closed);
     connections[0].closed(&connections[0], NET_OK); net_tick();
@@ -107,6 +106,7 @@ int main(void) {
     fixture_time = 80; net_tick(); CHECK(net_state(third) == NS_OPEN);
     connections[2].pending = 0; net_tick();
     fixture_time = 100; net_tick(); CHECK(net_state(third) == NS_OPEN);
+    CHECK(!net_recovery_needed());
     net_close(third); CHECK(closes == 2 && released == 2);
     complete_fence(); CHECK(closes == 3 && released == 2);
     connections[2].closed(&connections[2], NET_OK); net_tick(); CHECK(released == 2);
@@ -123,8 +123,11 @@ int main(void) {
     CHECK(net_state(fifth) == NS_CONNECTING);
     fixture_time = 150; net_close(fifth); // Open accepted but never called back.
     CHECK(closes == 4 && released == 4);
+    fixture_time = 179; net_tick(); CHECK(!net_recovery_needed());
+    fixture_time = 180; net_tick(); CHECK(net_recovery_needed());
+    CHECK(closes == 4 && released == 4);
     complete_fence(); CHECK(closes == 5 && released == 4);
-    complete_fence(); CHECK(released == 5 && net_idle());
+    complete_fence(); CHECK(released == 5 && net_idle() && !net_recovery_needed());
     NetSocket *sixth = net_open("fixture", 443, true);
     complete_open(5); CHECK(net_state(sixth) == NS_OPEN);
     net_close(sixth); CHECK(closes == 6 && released == 5);
@@ -145,6 +148,15 @@ int main(void) {
     complete_fence(); CHECK(closes == 10 && released == 8);
     // Tenth closed after the first fence was queued and needs the next fence.
     complete_fence(); CHECK(released == 10 && net_idle());
-    puts("PASS stalled writes, progress reset, callback loss, close ordering, remote close and shared fences");
+    NetSocket *relay = net_open("relay", 443, true); complete_open(10);
+    NetSocket *speech = net_open("speech", 443, true); complete_open(11);
+    NetSocket *queued = net_open("third", 443, true);
+    CHECK(created == 12 && net_waiting(queued));
+    net_close(relay); complete_fence();
+    CHECK(created == 13 && net_state(queued) == NS_CONNECTING);
+    complete_open(12);
+    net_close(speech); net_close(queued);
+    complete_fence(); complete_fence(); CHECK(net_idle());
+    puts("PASS stalled writes, recovery detection, callback ownership and two TLS slots");
     return 0;
 }

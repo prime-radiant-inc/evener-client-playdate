@@ -30,7 +30,7 @@ static int saved_revision = -1;
 static bool initialized, want_browse, want_read, want_older, want_send, replay_allowed;
 static bool can_send, can_queue, resume_required, resume_foldable, suspended, rebase_older, replace_chat;
 static char outgoing[57344], quoted_text[DRAFT_CAPACITY * 6 + 3];
-static char text_buffer[32768];
+static char text_buffer[32768], reading_anchor[192];
 
 static bool same(const char *a, const char *b) { return strcmp(a, b) == 0; }
 static void status(const char *message) { snprintf(hub_status, sizeof(hub_status), "%s", message); }
@@ -98,7 +98,9 @@ static void chat_item(const Json *j, int item, int overlay, bool backfill) {
     if (index < 0) {
         if (chat_count == CHAT_CAPACITY) {
             // Backfill moves the window toward older messages; Latest restores its tail.
-            remove_chat(backfill ? chat_count - 1 : 0);
+            int remove = backfill ? chat_count - 1 : 0;
+            if (same(chat[remove].key, reading_anchor)) remove = backfill ? 0 : chat_count - 1;
+            remove_chat(remove);
             if (!backfill) hub_has_older = rebase_older = true;
         }
         index = chat_count++;
@@ -322,7 +324,7 @@ void hub_connect(void) {
         navigation_count || chat_count ? "Connecting... Saved content available." : "Connecting to Evener...");
 }
 void hub_reset_profile(void) {
-    clear_chat(); memset(&draft, 0, sizeof(draft));
+    clear_chat(); memset(&draft, 0, sizeof(draft)); reading_anchor[0] = 0;
     selected_ref[0] = selected_title[0] = session_status[0] = 0;
     incarnation[0] = instance[0] = boot_generation[0] = older_cursor[0] = 0;
     navigation_count = navigation_offset = navigation_remaining = browse_tier = 0;
@@ -347,16 +349,37 @@ bool hub_select(const NavigationRow *row) {
     save_chat();
     snprintf(selected_ref, sizeof(selected_ref), "%s", row->ref);
     snprintf(selected_title, sizeof(selected_title), "%s", row->title);
-    clear_chat(); incarnation[0] = older_cursor[0] = session_status[0] = 0;
+    clear_chat(); incarnation[0] = older_cursor[0] = session_status[0] = reading_anchor[0] = 0;
     hub_hydrated = hub_has_older = replay_allowed = false;
     replace_chat = false;
     if (cache_load_chat()) { replace_chat = true; status("Saved conversation; updating..."); }
     want_read = true; want_older = want_send = false;
     return true;
 }
+void hub_set_reading_anchor(const char *key) { snprintf(reading_anchor, sizeof(reading_anchor), "%s", key); }
+bool hub_save_view(char *snapshot, size_t capacity) {
+    if (strlen(incarnation) >= capacity) return false;
+    if (selected_ref[0] && incarnation[0] && saved_revision != chat_revision) {
+        if (!cache_save_chat()) return false;
+        saved_revision = chat_revision;
+    }
+    snprintf(snapshot, capacity, "%s", incarnation);
+    return true;
+}
+bool hub_restore_view(const NavigationRow *row, const char *snapshot) {
+    if (!hub_select(row)) return false;
+    if (snapshot[0] && chat_count) {
+        // Only the checkpoint's successfully saved window has this identity.
+        // A fresh read still replaces it if the server incarnation changed.
+        snprintf(incarnation, sizeof(incarnation), "%s", snapshot);
+        replace_chat = false;
+    }
+    return true;
+}
 void hub_older(void) { if (hub_has_older) want_older = true; }
 void hub_latest(void) { save_chat(); replace_chat = true; want_read = true; want_older = false; }
 void hub_recheck(void) { want_read = selected_ref[0] != 0; if (!hub_ready) reconnect_at = 0; }
+bool hub_send_pending(void) { return want_send; }
 void hub_send(void) {
     if (draft.state == DRAFT_READY && draft.text[0]) { want_send = true; want_read = true; status("Preparing to send..."); }
 }
