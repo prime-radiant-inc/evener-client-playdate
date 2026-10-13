@@ -202,32 +202,33 @@ static void restore_network_context(void) {
     if (resume_send) hub_send();
     app_log("Network recovery restored view %d; selected %d; draft %d", screen, row.ref[0] != 0, draft.state);
 }
-static void recover_network(void) {
+static bool recover_network(void) {
     if (!net_recovery_needed() || app_time() < network_restart_at || pairing_active() || change_tailnet ||
-        voice_state == VOICE_RECORDING || !voice_audio_saved()) return;
+        voice_state == VOICE_RECORDING || !voice_audio_saved()) return false;
     // Keep the SDK's existing two TLS slots: DERP and transcription. Relaunch
-    // clears a blocked SDK worker without recycling an object it still owns.
+    // attempts recovery without recycling an object the worker still owns.
     static char ref[REF_CAPACITY * 6 + 3], title[160 * 6 + 3];
     static char project[REF_CAPACITY * 6 + 3], project_title[160 * 6 + 3], args[10000];
     static char snapshot[128], quoted_snapshot[128 * 6 + 3];
     network_restart_at = app_time() + 1;
-    if (!hub_save_view(snapshot, sizeof(snapshot)) || !json_quote(snapshot, quoted_snapshot, sizeof(quoted_snapshot))) return;
+    if (!hub_save_view(snapshot, sizeof(snapshot)) || !json_quote(snapshot, quoted_snapshot, sizeof(quoted_snapshot))) return false;
     if (!json_quote(selected_ref, ref, sizeof(ref)) || !json_quote(selected_title, title, sizeof(title)) ||
-        !json_quote(browse_project, project, sizeof(project)) || !json_quote(browse_title, project_title, sizeof(project_title))) return;
+        !json_quote(browse_project, project, sizeof(project)) || !json_quote(browse_title, project_title, sizeof(project_title))) return false;
     int length = snprintf(args, sizeof(args),
         "{\"networkRecovery\":1,\"screen\":%d,\"ref\":%s,\"title\":%s,\"browse\":%d,\"project\":%s,"
         "\"projectTitle\":%s,\"snapshot\":%s,\"tier\":%d,\"offset\":%d,\"selection\":%d,\"scroll\":%d,\"follow\":%s,\"send\":%s}",
         screen, ref, title, browse_kind, project, project_title, quoted_snapshot, browse_tier, navigation_offset, selection,
         scroll > 0 ? scroll : 0, follow ? "true" : "false", hub_send_pending() ? "true" : "false");
-    if (length < 0 || length >= sizeof(args)) return;
-    if (recording_started && !save_voice()) return;
+    if (length < 0 || length >= sizeof(args)) return false;
+    if (recording_started && !save_voice()) return false;
     if ((!recording_started && draft.ref[0] && !draft_save()) || !voice_prepare_restart()) {
-        snprintf(hub_status, sizeof(hub_status), "Saving your work before reconnecting..."); return;
+        snprintf(hub_status, sizeof(hub_status), "Saving your work before reconnecting..."); return false;
     }
     recording_started = false;
     network_restarting = true;
     app_log("Network recovery restarting app after SDK cleanup stalled");
     pd->system->restartGame(args);
+    return true;
 }
 static void compose(void) {
     screen = SCREEN_COMPOSER; reset_scroll(); recording_started = final_saved = false;
@@ -440,7 +441,8 @@ static int update(void *context) {
             if ((pressed & kButtonB) || hub_ready) screen = SCREEN_SESSIONS;
             else {
                 if (pressed & kButtonA) reconnect(NULL);
-                recover_network(); draw_authorization(); return 1;
+                if (recover_network()) return 0;
+                draw_authorization(); return 1;
             }
         }
         if ((pressed & kButtonA) && (screen == SCREEN_TRANSCRIPT ||
@@ -542,7 +544,7 @@ static int update(void *context) {
             if (screen == SCREEN_TRANSCRIPT && scroll >= content_height - CONTENT_HEIGHT && (move > 0 || (direction & kButtonDown))) follow = true;
         }
     }
-    recover_network();
+    if (recover_network()) return 0;
     draw();
     return 1;
 }

@@ -204,8 +204,9 @@ continues to capture speech. A failed draft or audio save defers relaunch.
 An interrupted transcription replays its saved audio after returning to the
 composer. Acoustic pairing and identity replacement keep their existing
 explicit retry flow rather than losing temporary setup state to a restart.
-After requesting restart, application updates, menu actions and lifecycle
-callbacks leave teardown to the SDK. The fallback does not allocate another
+After requesting restart, the current update returns without drawing or submitting
+another frame. Subsequent updates, menu actions and lifecycle callbacks leave
+teardown to the SDK. The fallback does not allocate another
 socket: one TLS slot belongs to DERP and the other to direct transcription.
 
 The device needs exclusive networking
