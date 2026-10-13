@@ -1,0 +1,6 @@
+name=Raw SDK TCP Probe
+author=Prime Radiant
+description=Direct Playdate SDK TCP duplex diagnostic.
+bundleID=com.primeradiant.diagnostic.sdkduplex
+version=0.2.0
+buildNumber=2
