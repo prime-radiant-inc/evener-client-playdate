@@ -1,0 +1,7 @@
+{
+  "python": "3.12.14",
+  "pillow": "12.3.0",
+  "numpy": "2.3.5",
+  "ffmpeg": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
+  "font": "Avenir Next, supplied by macOS; not redistributed"
+}

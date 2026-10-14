@@ -1,0 +1,47 @@
+[
+  {
+    "clip": "review",
+    "source_name": "device-02-voice-send.mp4",
+    "source_in": 164.1,
+    "duration": 6.2,
+    "frames_verified": 372,
+    "all_decoded_rgb_frames_match_source": true,
+    "clip_sha256": "90b871ebc383f83f471ebb17c46fbd9db97295ea22b26ef21c8167156de7d333"
+  },
+  {
+    "clip": "read",
+    "source_name": "device-02-voice-send.mp4",
+    "source_in": 297.2,
+    "duration": 8.2,
+    "frames_verified": 492,
+    "all_decoded_rgb_frames_match_source": true,
+    "clip_sha256": "676cf71327461f641066d324508b99c632e44280dd2d1f046e7f52898b75a004"
+  },
+  {
+    "clip": "hero",
+    "source_name": "device-02-voice-send.mp4",
+    "source_in": 305,
+    "duration": 8.2,
+    "frames_verified": 492,
+    "all_decoded_rgb_frames_match_source": true,
+    "clip_sha256": "015dd091aaa8320ed210fbdde5ff3ccf521de8384bab923754cedd105fdbc629"
+  },
+  {
+    "clip": "voice",
+    "source_name": "Playdate 2026-10-14_09:11:56.mp4",
+    "source_in": 28,
+    "duration": 8.2,
+    "frames_verified": 492,
+    "all_decoded_rgb_frames_match_source": true,
+    "clip_sha256": "2caa2df2c56ed6a38384adc801be61adc3873e4eac82851e34c493c1375ee2a7"
+  },
+  {
+    "clip": "setup",
+    "source_name": "Playdate 2026-10-14_09:24:00.mp4",
+    "source_in": 20,
+    "duration": 8.2,
+    "frames_verified": 492,
+    "all_decoded_rgb_frames_match_source": true,
+    "clip_sha256": "1cfcce89bc2deba370ffaf24d735d29633274bf47f9f95002632394dc9af7b4c"
+  }
+]

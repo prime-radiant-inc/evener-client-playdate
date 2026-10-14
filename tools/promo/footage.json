@@ -1,0 +1,21 @@
+{
+  "preview": false,
+  "screens": {
+    "setup": {
+      "path": "inputs/setup.mp4"
+    },
+    "read": {
+      "path": "inputs/read.mp4"
+    },
+    "voice": {
+      "path": "inputs/voice.mp4",
+      "release": 7.517
+    },
+    "review": {
+      "path": "inputs/review.mp4"
+    },
+    "hero": {
+      "path": "inputs/hero.mp4"
+    }
+  }
+}

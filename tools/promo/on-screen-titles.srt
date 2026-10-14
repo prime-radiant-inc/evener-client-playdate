@@ -1,0 +1,39 @@
+1
+00:00:00,000 --> 00:00:06,000
+Your agents. A little closer.
+Evener for Playdate.
+
+2
+00:00:06,000 --> 00:00:14,000
+Start with a chirp.
+Pair using sound. Listening for your Hub's invitation.
+
+3
+00:00:14,000 --> 00:00:22,000
+Pick up the conversation.
+Sessions. Projects. Turn the crank to scroll.
+
+4
+00:00:22,000 --> 00:00:30,000
+Hold. Speak.
+Hold A to dictate.
+
+5
+00:00:30,000 --> 00:00:36,000
+Read it. Then send.
+Release to review. Press A separately to send.
+
+6
+00:00:36,000 --> 00:00:44,000
+Native C. Your Hub. Your tailnet.
+Made to connect directly.
+
+7
+00:00:44,000 --> 00:00:50,000
+Small screen. Big ideas.
+Evener for Playdate. An experimental native client.
+
+8
+00:00:50,000 --> 00:00:58,000
+Evener for Playdate. Experimental native client.
+Prime Radiant. primeradiant.com

@@ -1,17 +1,151 @@
 # Evener for Playdate
 
-A native C client for Playdate SDK 3.1.2. It connects directly to an
-Evener Hub over AppWire v7 through its own Tailscale DERP/WireGuard connection,
-and to OpenAI Realtime transcription over SDK TLS. Native control-plane
-maintenance refreshes the enrolled identity and selected Hub peer. Runtime
-needs no Mac helper or application proxy. The client's source and vendor trees
-contain its audio, networking and control dependencies. Building the app does
-not require an Evener source checkout.
+Your Evener conversations, on a Playdate. Browse live sessions and projects,
+crank through a conversation, and hold A to dictate. Review the text, then press
+A again to send it.
 
-See the [client guide](docs/client.md), [source provenance](docs/provenance.md),
-and [physical qualification report](docs/qualification/2026-10-10-native-client.md).
+The native C client connects directly to your Evener Hub through its own
+Tailscale connection, or through a reachable Wi-Fi network. Voice transcription
+connects directly to OpenAI. Once installed, the handheld needs no Mac helper
+or application proxy. Built by [Prime Radiant](https://primeradiant.com).
 
-## Controls
+## Watch it in action
+
+[![Watch Evener for Playdate: A little closer](docs/media/poster.png)](docs/media/evener-playdate-promo.mp4)
+
+[Watch the 58-second film](docs/media/evener-playdate-promo.mp4), with real
+Playdate screen recordings, animated graphics and original music. It shows live
+dictation, review before sending, reading, and the start of sound pairing.
+The [editable production source](tools/promo/README.md) includes the selected
+captures, score generator and rendering instructions.
+
+## On the Playdate
+
+| Browse sessions | Read conversations |
+| --- | --- |
+| ![Live sessions on the Playdate](docs/images/client-sessions.png) | ![An Evener conversation on the Playdate](docs/images/client-conversation.png) |
+| **Review a voice message** | **Pair with your Hub** |
+| ![Dictated text ready for review before sending](docs/images/client-voice-review.png) | ![The Playdate sound-pairing screen](docs/images/client-pairing.png) |
+
+These are actual Playdate display captures recorded through Mirror. The gallery
+uses a demonstration conversation and a fresh setup screen; the voice-review
+take was kept unsent. See the [capture provenance](docs/images/README.md).
+
+This is an experimental client. Playdate SDK network stalls can interrupt
+loading or transcription, and automatic recovery does not yet cover every
+failure. The [hardware records](docs/qualification/2026-10-13-runtime-recovery.md)
+and [SDK report](docs/qualification/sdk-network-report.md) retain the successful
+runs and remaining failures.
+
+## What you need
+
+- A Playdate with Wi-Fi configured and a USB data cable. The recorded hardware
+  runs use Playdate OS 3.1.2; use that firmware baseline for this build.
+- An Evener Hub with shared device pairing and history content selection, and
+  access to its authenticated Web UI. Update the Hub before installing the client.
+- For Tailscale, permission to join the same tailnet as the Hub. Direct Wi-Fi
+  also works when the Hub address is reachable from the Playdate's network.
+- [Playdate SDK 3.1.2](https://play.date/dev/), a native C compiler, Make, and a
+  full ARM GNU toolchain with newlib. The SDK's
+  [C build guide](https://sdk.play.date/3.1.2/Inside%20Playdate%20with%20C.html#_prerequisites)
+  covers the compiler setup. Node 22+ generates the private configuration.
+- Your own OpenAI API key for voice transcription, stored in a private env file
+  outside this checkout as `OPENAI_API_KEY`.
+
+The SDK includes the networking API used here. The Playdate connects using its
+own Wi-Fi configuration; attaching a USB cable does not give it the computer's
+network connection.
+
+## Build your private app
+
+The client and its dependencies live in this repository; an Evener source
+checkout is not needed to build it. Clone the repository, then replace the
+example paths below with your env file, SDK and ARM toolchain locations:
+
+```sh
+git clone https://github.com/prime-radiant-inc/evener-client-playdate.git
+cd evener-client-playdate
+
+node --env-file=/path/to/openai.env configure.mjs --setup-only
+
+export PLAYDATE_SDK_PATH=/path/to/PlaydateSDK
+export PATH=/path/to/arm-gnu-toolchain/bin:$PATH
+make
+```
+
+`make` builds `Evener.pdx` for the handheld and your computer's Simulator.
+`--setup-only` creates a unique entropy seed and leaves Hub and Tailscale
+credentials for onboarding. A new installation starts by listening for setup
+sound; updating an existing installation retains its saved destination.
+
+**Keep `Evener.pdx` private.** It contains your OpenAI key. Generated
+`Source/config.json`, `Source/tailnet.json` and build outputs are ignored by Git,
+but those files are included when needed in the compiled bundle. Generate a
+separate configuration for each device; do not share a configured bundle.
+
+## Sideload over USB
+
+Data Disk mode copies the private bundle directly to the handheld and does not
+start another client in the Simulator. These steps follow Playdate's
+[official sideloading guide](https://help.play.date/games/sideloading/):
+
+1. Connect and unlock your Playdate. Open **Settings → System → Reboot to Data
+   Disk** and confirm.
+2. On your computer, open the mounted **PLAYDATE** volume, then **Games**. Copy
+   the entire **Evener.pdx** folder into Games. Copy the `.pdx`, not a zip file or
+   the individual files inside it.
+3. Eject the PLAYDATE volume. Once the device returns to its launcher, open
+   **Evener**.
+4. Allow microphone and network access when requested. Sound setup needs the
+   microphone; Hub access and voice may request connections to the selected Hub,
+   Tailscale services and relay, and OpenAI.
+
+The SDK's alternative is to open `Evener.pdx` in Playdate Simulator and choose
+**Device → Upload Game to Device**. Only one runtime may use an enrolled native
+Tailscale identity at a time: stop that identity in the Simulator before running
+it on the handheld, and vice versa. Data Disk installation avoids that overlap.
+
+Playdate's website can also sideload games, but it uploads the bundle to your
+Playdate account. For this app that would include the embedded OpenAI key and
+any baked-in Hub or Tailscale credentials; USB keeps the private bundle local.
+
+## Pair with your Hub
+
+1. Leave the Playdate on **Receive setup**. A fresh setup-only installation opens
+   it automatically. To pair an existing installation, open the system menu and
+   choose **Actions → Receive setup**.
+2. In your authenticated Evener Web UI, open **Settings → Mobile app → Pair using
+   sound**. Check the suggested **Hub address**. The Hub discovers a destination
+   automatically when possible; edit it if another address is reachable from the
+   handheld. A computer's `localhost` address is not a device destination.
+3. Choose **Tailscale** or **Direct Wi-Fi**, then **Create invitation**. Put the
+   Playdate near the computer's speaker and select **Play setup sound**. Keep it
+   there until the transfer finishes. Replay the same sound if fragments are
+   missing; received fragments are kept. The browser needs speaker output, not
+   microphone or camera access, and works on HTTP inside the tailnet.
+4. If Tailscale enrollment is needed, the Playdate displays a sign-in QR. Scan
+   it with your phone, complete Tailscale's authorization in the browser, and
+   choose the Hub's tailnet. Leave the Playdate connected while it finishes.
+   This signs the handheld into Tailscale; Hub approval is the next step.
+5. Compare **all four lines** of the fingerprint on the Playdate and the Hub's
+   pairing screen. When they match, choose **Codes match — approve** in the Hub.
+6. Review the destination on the Playdate and press **A** to save it. **B** cancels
+   without replacing the saved destination or drafts. The session list opens
+   after the client connects.
+
+Keep the browser's pairing screen open until setup finishes. Invitations expire
+after ten minutes. If one expires, or you restart the app during pairing, create
+a new invitation and receive its sound again. An ordinary network interruption
+retries the same pending claim. Cancelling setup preserves the previous Hub and
+its saved work.
+
+The sound carries a short-lived invitation, not your Hub credential. Approval
+returns that credential encrypted to the receiving device's temporary key.
+The OpenAI key stays in your private build and is never sent in the setup sound.
+See the [shared pairing protocol](docs/device-pairing.md) for the Hub-owned
+contract, also used by the native phone app.
+
+## Use the client
 
 - **Sessions:** D-pad or crank selects; A opens. Left/right switches Live and
   Projects. Inside a project, left/right switches Current, Recent and Archived.
@@ -54,54 +188,11 @@ The display includes user messages, assistant messages and human steering.
 Tools, reasoning, images, interactive approval cards and Hub settings are outside
 this client's scope. Use another Evener client for those interactions.
 History reads request conversation-only content from the Hub using the generic
-AppWire inclusion flags. Use a Hub that implements history content selection;
-update the Hub before installing this client build.
+AppWire inclusion flags. The [client guide](docs/client.md) explains saved
+destinations, draft ownership and recovery. See [source provenance](docs/provenance.md)
+for the standalone repository's origin.
 
-## Configure and build
-
-Acoustic setup requires a Hub with the shared device-pairing API and Web UI,
-maintained in the Evener repository. For a Hub without that feature, use the
-baked-in destination configuration below. Ordinary session browsing and voice
-use the existing Hub API.
-
-Install Playdate SDK 3.1.2 and a full ARM GNU toolchain with newlib. Node 22+
-is needed only to generate the private configuration.
-
-Clone `prime-radiant-inc/evener-client-playdate` and run from its root:
-
-```sh
-node --env-file=/path/to/openai.env configure.mjs \
-  --setup-only
-
-export PLAYDATE_SDK_PATH=/path/to/PlaydateSDK
-export PATH=/path/to/arm-gnu-toolchain/bin:$PATH
-make
-```
-
-The environment file supplies `OPENAI_API_KEY`. The generator creates a unique
-private entropy seed and omits Hub and tailnet credentials. On first launch,
-the device listens for setup sound. In the authenticated Web UI, open **Settings →
-Mobile app → Pair using sound**, select the Hub address and Tailscale or direct
-Wi-Fi, create an invitation and play its sound near the device. If fragments are
-missing, replay the same sound. The browser needs no microphone or camera and
-works on HTTP over the tailnet.
-
-The invitation supplies the address and a short-lived secret. The Playdate
-contacts that Hub with its own temporary key. Compare the fingerprints and
-approve that device in the browser. The Hub returns the credential encrypted to
-the approved key; press A on the Playdate to save the reviewed destination.
-The [shared protocol reference](docs/device-pairing.md) also supplies QR invitations
-to the native phone app. The Hub and Web UI have no device-specific pairing API.
-
-For Tailscale, the device shows the official sign-in QR if it needs enrollment;
-approve it on the Hub's tailnet. The native client saves its pending identity
-before registering and resumes that identity across restarts. The authenticated
-map resolves the Hub by name or IPv4 address. A network interruption retries the
-same pending claim; cancelling or restarting setup leaves the saved Hub and its
-drafts untouched. Receiving an invitation temporarily selects its connection
-namespace, while data ownership changes only after A saves the approved Hub.
-OpenAI stays direct with the key in this private build; a shared Hub voice
-endpoint is a future integration, not required by setup.
+## Advanced private configuration
 
 To bake in a destination instead, replace `--setup-only` with
 `--hub-url http://your-hub:9180 --hub-token-file /path/to/hub-token`.
@@ -118,9 +209,9 @@ Use an HTTP/WS Hub URL inside the encrypted tailnet: WireGuard authenticates the
 selected peer and encrypts the Hub stream, while the DERP socket uses verified
 TLS. The generator takes the Hub address and port from the enrolled peer;
 authenticated map refreshes keep them current. OpenAI uses its separate verified
-SDK TLS connection. Without `--tailnet-config`, configuration selects the
-existing SDK TCP/TLS mode and needs a Hub address reachable from the device's
-network; HTTP/WS in that mode carries plaintext traffic on that network.
+SDK TLS connection. A baked-in destination without `--tailnet-config` selects
+SDK TCP/TLS mode and needs a Hub address reachable from the device's network;
+HTTP/WS in that mode carries plaintext traffic on that network.
 
 Only one runtime may own the isolated node identity. Stop the device before
 running enrollment, native host probes or refresh with that identity. After
@@ -129,15 +220,11 @@ current configuration and `--adopt-native-config`; a stale bundled configuration
 cannot establish its current keys. See the helper's ownership contract before
 performing that transfer.
 
-Open `Evener.pdx` in Playdate Simulator, then choose **Device → Upload Game To
-Device**. The installed app is **Evener**. Allow its microphone and network
-permissions for the transcription service, Tailscale control service and selected
-DERP relay. The bundle includes its generated configuration and credentials,
-as explicitly chosen for this personal build. `Source/config.json`,
-`Source/tailnet.json`, build outputs and PDX bundles are ignored by Git; do not
-distribute the private PDX.
-
 ## Ownership and limits
+
+The client uses AppWire v7 and its own Tailscale DERP/WireGuard connection.
+Native control-plane maintenance refreshes the enrolled identity and selected
+Hub peer. OpenAI Realtime transcription uses a separate SDK TLS connection.
 
 The 400 × 240 layout shows six, five or four session/project rows for Small,
 Medium or Large text. List titles and conversation text use the chosen system

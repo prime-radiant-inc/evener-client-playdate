@@ -1,0 +1,38 @@
+{
+  "capture": "Actual primary Playdate client, recorded through official Mirror",
+  "inputs": {
+    "review": {
+      "in": 164.1,
+      "duration": 6.2,
+      "observed": "Review remains visible; separate send begins around source166.8seconds."
+    },
+    "read": {
+      "in": 297.2,
+      "duration": 8.2,
+      "observed": "Deliberate history scroll and return to latest reply."
+    },
+    "hero": {
+      "in": 305,
+      "duration": 8.2,
+      "observed": "Recorded user and assistant small screen big ideas exchange; idle footer remains visible."
+    },
+    "voice": {
+      "source_sha256": "94830dce849bbcec1121b9ea755fc43da99e5d920342b70ffdb78efb1b7be505",
+      "in": 28,
+      "duration": 8.2,
+      "observed": "Actual microphone recording with a partial caption, followed by the remainder of the fixture transcription. This duplicate take was not sent. Review/send scene comes from the canonical prior capture.",
+      "source_name": "Playdate 2026-10-14_09:11:56.mp4"
+    },
+    "setup": {
+      "source_name": "Playdate 2026-10-14_09:24:00.mp4",
+      "source_sha256": "c43aba18eba361049ee5ee8cc2783f0a8884c6eb11f96e2f8bf482360a5a68db",
+      "in": 20,
+      "duration": 8.2,
+      "observed": "Actual Receive setup screen, Received0percent, Listening. The capture does not show receipt of a setup invitation or completed onboarding."
+    }
+  },
+  "transform": "Original display pixels converted toRGB, then scaled from800x480 to400x240 with nearest neighbor. CFR60 holds preserve sparse VFR timing before editorial trims. RGB H.264 intermediates are lossless; every decoded frame is verified against the corresponding raw source. No content replacement, UI fabrication, speed change, capture audio or cropping.",
+  "source_sha256": "7d3bc086eadc04d27f118aeaf7f1483740b9b0bb82a3920f3ceb87b466e07a0e",
+  "source_name": "device-02-voice-send.mp4",
+  "audio": "Original synthesized score with designed three-note chirps. These are musical sound design, not a recording of the Hub invitation."
+}
