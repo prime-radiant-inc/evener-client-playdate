@@ -18,6 +18,9 @@ static char comparison[PAIRING_COMPARISON_SIZE];
 static float started;
 static AudioBuffer audio;
 static ChirpDecoder decoder;
+static atomic_uint microphone_peak, microphone_samples, microphone_clipped;
+static unsigned input_peak, interval_peak, interruptions;
+static float input_log_at;
 static uint8_t qr_work[qrcodegen_BUFFER_LEN_FOR_VERSION(12)], qr_code[qrcodegen_BUFFER_LEN_FOR_VERSION(12)];
 static char qr_cached[512];
 static bool qr_valid;
@@ -41,12 +44,39 @@ bool pairing_draw_qr(const char *value, int x, int y, int maximum) {
 }
 static void stop_mic(void) {
     if (listening) pd->sound->setMicCallback(NULL, NULL, kMicInputInternal);
-    listening = false;
+    listening = false; input_peak = 0;
 }
 static int microphone(void *context, int16_t *samples, int count) {
     (void)context;
-    if (count > 0) audio_push(&audio, samples, (size_t)count);
+    if (count <= 0) return 1;
+    unsigned peak = 0, clipped = 0;
+    for (int i = 0; i < count; i++) {
+        int value = samples[i];
+        if (value < 0) value = -value;
+        if ((unsigned)value > peak) peak = (unsigned)value;
+        if (value >= 32760) clipped++;
+    }
+    // Keep brief peaks between game updates without doing decoding or drawing here.
+    unsigned previous = atomic_load_explicit(&microphone_peak, memory_order_relaxed);
+    while (peak > previous && !atomic_compare_exchange_weak_explicit(&microphone_peak, &previous, peak,
+        memory_order_relaxed, memory_order_relaxed)) {}
+    atomic_fetch_add_explicit(&microphone_samples, (unsigned)count, memory_order_relaxed);
+    atomic_fetch_add_explicit(&microphone_clipped, clipped, memory_order_relaxed);
+    audio_push(&audio, samples, (size_t)count);
     return 1;
+}
+static void update_input(void) {
+    unsigned peak = atomic_exchange_explicit(&microphone_peak, 0, memory_order_relaxed);
+    input_peak = input_peak * 3 / 4;
+    if (peak > input_peak) input_peak = peak;
+    if (peak > interval_peak) interval_peak = peak;
+    if (!listening || app_time() < input_log_at) return;
+    unsigned captured = atomic_exchange_explicit(&microphone_samples, 0, memory_order_relaxed);
+    unsigned clipped = atomic_exchange_explicit(&microphone_clipped, 0, memory_order_relaxed);
+    unsigned queued = atomic_load(&audio.written) - atomic_load(&audio.read);
+    app_log("Pairing input: samples=%u peak=%u clipped=%u queued=%u interruptions=%u valid=%u rejected=%u",
+        captured, interval_peak, clipped, queued, interruptions, decoder.valid_frames, decoder.rejected_frames);
+    interval_peak = interruptions = 0; input_log_at = app_time() + 1;
 }
 static void permission(bool granted, void *context) {
     (void)context; asking = false; allowed = granted;
@@ -63,6 +93,8 @@ static void listen(void) {
         if (!allowed || listening || !active || paused) return;
     }
     audio_reset(&audio);
+    atomic_store(&microphone_peak, 0); atomic_store(&microphone_samples, 0); atomic_store(&microphone_clipped, 0);
+    input_peak = interval_peak = interruptions = 0; input_log_at = app_time() + 1;
     listening = pd->sound->setMicCallback(microphone, NULL, kMicInputInternal) != 0;
     snprintf(status, sizeof(status), "%s", listening ? "Listening..." : "Microphone unavailable.");
 }
@@ -134,6 +166,7 @@ enum PairingResult pairing_update(PDButtons pressed) {
     }
     if (pressed & kButtonA) listen();
     if (atomic_exchange(&audio.overflow, false)) {
+        interruptions++;
         decoder.receiving = false; decoder.hops = decoder.hop_samples = 0;
         for (unsigned i = 0; i < CHIRP_HISTORY; i++) decoder.history[i] = -1;
         snprintf(status, sizeof(status), "Sound interrupted. Play it again to finish.");
@@ -144,6 +177,7 @@ enum PairingResult pairing_update(PDButtons pressed) {
         if (!count) break;
         chirp_feed(&decoder, samples, count);
     }
+    update_input();
     if (chirp_complete(&decoder)) {
         if (pairing_invitation(decoder.bytes, decoder.length, &invitation)) {
             stop_mic(); received_invitation = true; started = app_time();
@@ -196,8 +230,17 @@ void pairing_draw(LCDFont *font) {
         text(review ? "A Save and connect    B Cancel" : "B Cancel", 8, 223, 384, 16);
     } else {
         if (!terminal) {
-            snprintf(summary, sizeof(summary), "In Evener: Settings > Mobile app > Pair using sound.\n\nPlay the setup sound near this Playdate.\n\nReceived: %u%%", chirp_progress(&decoder));
-            text(summary, 12, 36, 376, 130);
+            text("In Evener: Settings > Mobile app > Pair using sound.\n\nPlay the setup sound near this Playdate.", 12, 36, 376, 84);
+            snprintf(summary, sizeof(summary), "Received: %u%%", chirp_progress(&decoder));
+            text(summary, 12, 128, 376, 20);
+            text("Mic", 12, 152, 44, 16);
+            // Six-decibel steps make quiet input visible independently of valid fragments.
+            const unsigned thresholds[] = {16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32767};
+            for (unsigned i = 0; i < sizeof(thresholds) / sizeof(thresholds[0]); i++) {
+                int x = 60 + (int)i * 27;
+                pd->graphics->fillRect(x, 154, 24, 12, kColorBlack);
+                if (input_peak < thresholds[i]) pd->graphics->fillRect(x + 2, 156, 20, 8, kColorWhite);
+            }
         }
         text(status, 12, terminal ? 36 : 172, 376, terminal ? 175 : 44);
         const char *actions = "B Cancel";
