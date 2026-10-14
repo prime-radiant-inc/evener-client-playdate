@@ -17,6 +17,11 @@ on launch. The browser plays the shared [device invitation](device-pairing.md)
 as sound. It contains the Hub address and a temporary invitation secret, not a
 Hub credential. The microphone queues PCM; the game loop decodes and verifies
 complete fragments. Repeated playback repairs missing fragments.
+The receiver evaluates timing offsets across each sound symbol using the same
+frequency analysis. A fragment is accepted once, at the first offset whose
+complete frame passes its checksum; only failure at every offset rejects the
+fragment. This accommodates microphone timing and room reflections without
+changing the shared sound format or retaining the recording.
 The listening screen shows a live microphone peak meter independently of the
 received-fragment percentage. Its six-decibel steps show quiet input, with a
 short decay between sounds; meter movement indicates microphone input, while
