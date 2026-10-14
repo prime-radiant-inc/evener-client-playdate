@@ -309,18 +309,23 @@ def device(im,screen,cx,cy,scale=1.,angle=0.,crank=0.,hold=0.,shadow=True):
     src=screen.resize((sw*2,sh*2),Image.Resampling.NEAREST)
     body.paste(src,(sx*2,sy*2))
     d=ScaledDraw(body)
-    # The crank's axle leaves the right side at control height. Its narrow
-    # projected orbit stays outside the face as the arm turns in depth.
-    d.ellipse((575,441,595,469),fill=(185,137,16))
-    d.ellipse((577,443,593,467),fill=(248,197,35))
-    rounded_line(d,[(586,455),(606,455)],(126,135,130),17)
-    gx=606+16*math.cos(crank)
-    gy=455-149*math.sin(crank)
-    rounded_line(d,[(608,458),(gx+2,gy+3)],(91,100,95),24)
-    rounded_line(d,[(606,455),(gx,gy)],(192,201,195),22)
-    rounded_line(d,[(602,453),(gx-4,gy-2)],(232,236,227),4)
-    d.ellipse((gx-12,gy-12,gx+12,gy+12),fill=(184,193,187))
-    d.ellipse((gx-7,gy-7,gx+7,gy+7),fill=YELLOW,outline=(165,127,26),width=1)
+    # The axle sits halfway down the right edge, level with the display's
+    # lower edge. The yellow axle cap stays fixed while the handle turns.
+    px,py=601,304
+    gx=px+11*math.cos(crank)
+    gy=py+149*math.sin(crank)
+    rounded_line(d,[(582,py),(px,py)],(126,135,130),17)
+    # The inward-facing grip can disappear behind the case during its orbit.
+    hx=max(578,gx-24)
+    if gx-12>hx:
+        d.rounded_rectangle((hx,gy-18,gx-12,gy+18),radius=5,
+                            fill=YELLOW,outline=(165,127,26),width=1)
+    rounded_line(d,[(gx-12,gy),(gx,gy)],(126,135,130),13)
+    rounded_line(d,[(px+2,py+3),(gx+2,gy+3)],(91,100,95),24)
+    rounded_line(d,[(px,py),(gx,gy)],(192,201,195),22)
+    rounded_line(d,[(px-4,py-2),(gx-4,gy-2)],(232,236,227),4)
+    d.ellipse((px-12,py-12,px+12,py+12),fill=(184,193,187))
+    d.ellipse((px-7,py-7,px+7,py+7),fill=YELLOW,outline=(165,127,26),width=1)
     if hold>0:
         ax,ay=A_BUTTON_CENTER
         rad=43+5*math.sin(hold*4)
