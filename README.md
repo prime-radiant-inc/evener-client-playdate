@@ -11,17 +11,23 @@ or application proxy. Built by [Prime Radiant](https://primeradiant.com).
 
 ## Watch it in action
 
-[![Watch Evener for Playdate: A little closer](docs/media/poster.png)](https://primeradiant.com/media/evener-playdate/evener-playdate-promo.mp4)
+Play either video below; use the speaker control to turn on sound.
 
-[Watch the 58-second film](https://primeradiant.com/media/evener-playdate/evener-playdate-promo.mp4), with real
+### A little closer
+
+https://github.com/user-attachments/assets/674019b1-24f0-4310-9818-3a93912627a0
+
+[Watch the 58-second film](https://github.com/user-attachments/assets/674019b1-24f0-4310-9818-3a93912627a0), with real
 Playdate screen recordings, animated graphics and original music. It shows live
 dictation, review before sending, reading, and the start of sound pairing.
 The [editable production source](tools/promo/README.md) includes the selected
 captures, score generator and rendering instructions.
 
-[![Watch the recorded setup and onboarding walkthrough](docs/media/onboarding-poster.png)](https://primeradiant.com/media/evener-playdate/evener-playdate-onboarding.mp4)
+### Setup and onboarding
 
-The [2 minute 34 second onboarding walkthrough](https://primeradiant.com/media/evener-playdate/evener-playdate-onboarding.mp4)
+https://github.com/user-attachments/assets/e174600a-407f-4243-a867-717a84d7fd31
+
+The [2 minute 34 second onboarding walkthrough](https://github.com/user-attachments/assets/e174600a-407f-4243-a867-717a84d7fd31)
 explains private installation and sideloading, plays the actual recorded setup
 sound, shows Hub code comparison and approval, then walks through dictation,
 review, sending and a reply. It includes English captions and chapters. The
