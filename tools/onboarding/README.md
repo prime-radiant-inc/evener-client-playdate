@@ -54,4 +54,10 @@ Mirror captures are sparse: unchanged screens may have no new encoded frame for 
 
 Each media object accepts `path`, `in`, optional `duration`, `speed`, optional `[x, y, width, height]` `crop`, and `hold_last`. A final device scene requires actual video. Source overruns fail unless `hold_last` is explicitly true; such a freeze receives a visible label. No scene in this delivered film overruns its source.
 
+Corrupt input and unexpectedly early decoder exit stop the render with captured FFmpeg diagnostics; `hold_last` does not authorize a freeze inside a damaged clip. The focused decoder checks create tiny local fixtures and need no device or network:
+
+```sh
+.venv/bin/python3 -m unittest -v test_renderer
+```
+
 Audio is explicit: a scene's `audio` entries use local `at` times, optional input trim/duration and `gain_db`. Top-level tracks use absolute film time. Tracks are mixed at the declared gain, peak-limited and encoded as 48 kHz stereo AAC. There is no automatic narration ducking; keep the setup sound clear when editing.

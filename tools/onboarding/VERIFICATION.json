@@ -43,5 +43,13 @@
       "decoder_handles_closed_at_end": true,
       "still_resize_reused": true
     }
+  },
+  "decoder_failure_regression": {
+    "test_command": "python3 -m unittest -v test_renderer",
+    "tests": 5,
+    "before_fix": "4 failing cases: truncated clip with hold disabled/enabled, clean early decoder exit, and unapproved source overrun",
+    "after_fix": "5 tests passed; complete sequence and explicit final-frame hold still work",
+    "decoder_diagnostics": "Captured actual FFmpeg corrupt-packet diagnostics and verified process/log cleanup",
+    "good_film_after_fix": "Complete rerender and AV decode; byte-identical to delivered film"
   }
 }

@@ -9,6 +9,7 @@ import math
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -81,6 +82,7 @@ class Source:
         self.path = resolve(base, spec.get('path'))
         self.missing = not self.path or not self.path.is_file()
         self.proc = None
+        self.diagnostics = None
         self.frame_index = -1
         self.last = None
         self.held = False
@@ -128,6 +130,9 @@ class Source:
                 self.proc.kill()
                 self.proc.wait()
             self.proc = None
+        if self.diagnostics is not None:
+            self.diagnostics.close()
+            self.diagnostics = None
 
     def frame(self, seconds):
         if self.missing:
@@ -136,6 +141,8 @@ class Source:
             return self.last
         source_time = seconds * self.speed
         self.held = source_time >= self.duration
+        if self.held and not self.spec.get('hold_last'):
+            raise ValueError(f'Capture overrun requires hold_last=true: {self.path}')
         target = min(int(source_time * self.fps), max(0, math.ceil(self.duration * self.fps) - 1))
         if self.proc is None or target < self.frame_index or target - self.frame_index > self.fps * 3:
             self.close()
@@ -148,19 +155,23 @@ class Source:
             trim_start = self.start + target / self.fps
             filters = (f'crop={width}:{height}:{x}:{y},scale={dw}:{dh}:flags={scale},'
                        f'fps={self.fps},trim=start={trim_start},setpts=PTS-STARTPTS')
+            # A file retains decoder errors without filling an unread stderr pipe.
+            self.diagnostics = tempfile.TemporaryFile()
             self.proc = subprocess.Popen([
-                'ffmpeg', '-hide_banner', '-loglevel', 'error', '-i', str(self.path),
+                'ffmpeg', '-hide_banner', '-loglevel', 'error', '-xerror', '-i', str(self.path),
                 '-an', '-vf', filters, '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1'],
-                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                stdout=subprocess.PIPE, stderr=self.diagnostics)
             self.frame_index = target - 1
         count = self.decode_size[0] * self.decode_size[1] * 3
         while self.frame_index < target:
             raw = self.proc.stdout.read(count)
             if len(raw) != count:
-                if self.last is None:
-                    raise ValueError(f'Unable to decode capture: {self.path}')
-                self.held = True
-                break
+                self.diagnostics.seek(0)
+                detail = self.diagnostics.read().decode('utf-8', errors='replace').strip()
+                self.close()
+                raise ValueError(
+                    f'Decoder ended before frame {target} of {self.path}'
+                    + (f'\n{detail}' if detail else ''))
             self.last = Image.frombytes('RGB', self.decode_size, raw)
             self.frame_index += 1
         return self.last
