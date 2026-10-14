@@ -1,0 +1,373 @@
+{
+  "preview": false,
+  "fps": 30,
+  "logo": "assets/primeradiant-logo.png",
+  "status": "Instructional film. Phone approval was not filmed; setup sound and approved enrollment come from separate recorded takes.",
+  "editorial_note": "Only genuine supplied captures are shown. Setup transfer is a clean production recording. The subsequent b270 approval chapter is explicitly labeled an earlier recorded take. The phone step is an instruction card.",
+  "audio": [],
+  "scenes": [
+    {
+      "id": "opening",
+      "duration": 10,
+      "layout": "title",
+      "chapter": "A recorded walkthrough",
+      "title": "From setup\nto your first reply.",
+      "instruction": "Real hardware and Hub captures.\nSynthesized narration and demo speech.\nSeveral takes; waits edited. Phone approval shown as instructions.",
+      "cue": "REAL HARDWARE \u00b7 MULTIPLE RECORDED TAKES",
+      "narration": "This walkthrough uses real Playdate and Hub captures. Narration and the demonstration speech are synthesized. Waiting periods are edited.",
+      "edited_waits": false,
+      "audio": [
+        {
+          "path": "narration/opening.aiff",
+          "role": "synthesized_narration",
+          "at": 0.4,
+          "gain_db": -1
+        }
+      ]
+    },
+    {
+      "id": "private-build",
+      "duration": 14,
+      "layout": "title",
+      "chapter": "Before you start",
+      "title": "A private build.\nYour own Playdate.",
+      "instruction": "Build with --setup-only and your OpenAI key.\nCopy Evener.pdx to Games in USB Data Disk mode.\nEject the disk, then open Evener.",
+      "cue": "KEEP THE CONFIGURED BUNDLE PRIVATE",
+      "narration": "Build Evener in setup-only mode with your own OpenAI key. Keep that bundle private. Use USB Data Disk mode to copy Evener dot P D X into Games, then eject and open it.",
+      "edited_waits": false,
+      "audio": [
+        {
+          "path": "narration/private-build.aiff",
+          "role": "synthesized_narration",
+          "at": 0.4,
+          "gain_db": -1
+        }
+      ]
+    },
+    {
+      "id": "receive-setup",
+      "duration": 6,
+      "layout": "device",
+      "chapter": "Listen",
+      "title": "Open\nReceive setup.",
+      "instruction": "A setup-only installation starts here. On an existing installation, use the system menu, then Actions.",
+      "cue": "ACTIONS / RECEIVE SETUP",
+      "narration": "Open Receive setup. On an existing installation, find it under Actions in the system menu.",
+      "edited_waits": false,
+      "audio": [
+        {
+          "path": "narration/receive-setup.aiff",
+          "role": "synthesized_narration",
+          "at": 0.2,
+          "gain_db": -1
+        }
+      ],
+      "device": {
+        "path": "sources/production-receiver.mp4",
+        "in": 0,
+        "duration": 6,
+        "speed": 1,
+        "hold_last": false
+      }
+    },
+    {
+      "id": "hub-invitation",
+      "duration": 14,
+      "layout": "browser",
+      "chapter": "Create an invitation",
+      "title": "Use a reachable Hub address.",
+      "instruction": "Settings / Mobile app / Pair using sound\n\nChoose Tailscale, then create the invitation.",
+      "cue": "ACTUAL HUB CONTROLS",
+      "narration": "In the Hub, open Settings, Mobile app, then Pair using sound. Check the Hub address, choose Tailscale, and create an invitation.",
+      "edited_waits": false,
+      "audio": [
+        {
+          "path": "narration/hub-invitation.aiff",
+          "role": "synthesized_narration",
+          "at": 0.4,
+          "gain_db": -1
+        }
+      ],
+      "browser": {
+        "path": "sources/production-invitation-controls.png"
+      }
+    },
+    {
+      "id": "play-chirp",
+      "duration": 11.3,
+      "layout": "split",
+      "chapter": "Setup sound / production take",
+      "title": "Let the Playdate hear the setup sound.",
+      "instruction": "Actual room recording. Keep the Playdate near the speaker and let the sound finish.",
+      "cue": "ACTUAL SETUP AUDIO",
+      "narration": "Play the setup sound beside your Playdate.",
+      "edited_waits": false,
+      "audio": [
+        {
+          "path": "narration/play-chirp.aiff",
+          "role": "synthesized_narration",
+          "at": 0.3,
+          "gain_db": -1
+        },
+        {
+          "path": "sources/production-setup-room.wav",
+          "role": "actual_setup_sound",
+          "at": 0,
+          "gain_db": -8
+        }
+      ],
+      "device": {
+        "path": "sources/production-receiver.mp4",
+        "in": 4,
+        "duration": 11.3,
+        "speed": 1,
+        "hold_last": false
+      },
+      "browser": {
+        "path": "sources/production-browser.mp4",
+        "in": 4,
+        "duration": 11.3,
+        "speed": 1,
+        "hold_last": false
+      }
+    },
+    {
+      "id": "tailscale-phone",
+      "duration": 14,
+      "layout": "title",
+      "chapter": "Join the Hub\u2019s tailnet",
+      "title": "Authorize with\nyour phone.",
+      "instruction": "Scan the Tailscale sign-in QR on your Playdate.\nSign in and authorize the device on the Hub\u2019s tailnet.\nThis capture did not record the phone approval.",
+      "cue": "INSTRUCTIONAL STEP \u00b7 PHONE APPROVAL NOT RECORDED",
+      "narration": "If enrollment is needed, scan the Tailscale code on the Playdate. On your phone, sign in and authorize the device on the Hub\u2019s tailnet. Phone approval was not recorded.",
+      "edited_waits": false,
+      "audio": [
+        {
+          "path": "narration/tailscale-phone.aiff",
+          "role": "synthesized_narration",
+          "at": 0.4,
+          "gain_db": -1
+        }
+      ]
+    },
+    {
+      "id": "compare-fingerprint",
+      "duration": 16,
+      "layout": "split",
+      "chapter": "Approval / earlier recorded take",
+      "title": "Match every group on all four lines.",
+      "instruction": "Earlier recorded take. Compare the complete code on your own screens, then approve in the Hub.",
+      "cue": "HUB APPROVAL",
+      "narration": "This approval example is from an earlier take. Compare all four lines on your own screens. When every group matches, approve in the Hub.",
+      "edited_waits": true,
+      "audio": [
+        {
+          "path": "narration/compare-fingerprint.aiff",
+          "role": "synthesized_narration",
+          "at": 0.4,
+          "gain_db": -1
+        }
+      ],
+      "device": {
+        "path": "sources/comparison.mp4",
+        "in": 0,
+        "speed": 1,
+        "hold_last": false
+      },
+      "browser": {
+        "path": "sources/hub-comparison.png"
+      }
+    },
+    {
+      "id": "hub-approved",
+      "duration": 6,
+      "layout": "browser",
+      "chapter": "Approval confirmed",
+      "title": "Keep the Playdate connected.",
+      "instruction": "The Hub confirms approval. Leave the device connected while setup finishes.",
+      "cue": "ACTUAL APPROVED STATE",
+      "narration": "The Hub confirms approval. Keep the Playdate connected.",
+      "edited_waits": true,
+      "audio": [
+        {
+          "path": "narration/hub-approved.aiff",
+          "role": "synthesized_narration",
+          "at": 0.4,
+          "gain_db": -1
+        }
+      ],
+      "browser": {
+        "path": "sources/hub-approved.png"
+      }
+    },
+    {
+      "id": "save-destination",
+      "duration": 10,
+      "layout": "device",
+      "chapter": "Save",
+      "title": "Review.\nPress A to save.",
+      "instruction": "Check the Hub address and connection shown on the Playdate. A saves this destination; B cancels.",
+      "cue": "A  SAVE AND CONNECT",
+      "narration": "Review the destination on the Playdate, then press A to save it. The client connects and opens your sessions.",
+      "edited_waits": true,
+      "audio": [
+        {
+          "path": "narration/save-destination.aiff",
+          "role": "synthesized_narration",
+          "at": 0.4,
+          "gain_db": -1
+        }
+      ],
+      "device": {
+        "path": "sources/save-destination.mp4",
+        "in": 0,
+        "speed": 1,
+        "hold_last": false
+      }
+    },
+    {
+      "id": "browse",
+      "duration": 6,
+      "layout": "device",
+      "chapter": "Find a conversation",
+      "title": "Choose a\nconversation.",
+      "instruction": "Use the crank or D-pad to select a session. Press A to open it.",
+      "cue": "CRANK / D-PAD  SELECT",
+      "narration": "Select a session with the crank or D-pad, then press A to open it.",
+      "edited_waits": true,
+      "audio": [
+        {
+          "path": "narration/browse.aiff",
+          "role": "synthesized_narration",
+          "at": 0.4,
+          "gain_db": -1
+        }
+      ],
+      "device": {
+        "path": "sources/test-session.mp4",
+        "in": 0,
+        "speed": 1,
+        "hold_last": false
+      }
+    },
+    {
+      "id": "dictate",
+      "duration": 6,
+      "layout": "device",
+      "chapter": "Dictate",
+      "title": "Hold A.\nStart speaking.",
+      "instruction": "Capture starts as soon as you hold A. Captions appear as transcription becomes ready.",
+      "cue": "HOLD A  DICTATE",
+      "narration": "Hold A and start speaking immediately. The microphone captures your words.",
+      "edited_waits": false,
+      "audio": [
+        {
+          "path": "narration/dictate.aiff",
+          "role": "synthesized_narration",
+          "at": 0.4,
+          "gain_db": -1
+        }
+      ],
+      "device": {
+        "path": "sources/dictate.mp4",
+        "in": 0,
+        "speed": 1,
+        "hold_last": false
+      }
+    },
+    {
+      "id": "review",
+      "duration": 15,
+      "layout": "device",
+      "chapter": "Review",
+      "title": "Release A.\nRead your words.",
+      "instruction": "Wait for the saved final text. Review it before sending.",
+      "cue": "RELEASE A  FINISH",
+      "narration": "Release A to finish recording. Wait for the final text to be saved, then read it. The message has not been sent yet.",
+      "edited_waits": false,
+      "audio": [
+        {
+          "path": "narration/review.aiff",
+          "role": "synthesized_narration",
+          "at": 0.4,
+          "gain_db": -1
+        }
+      ],
+      "device": {
+        "path": "sources/review.mp4",
+        "in": 0,
+        "speed": 1,
+        "hold_last": false
+      }
+    },
+    {
+      "id": "send",
+      "duration": 8,
+      "layout": "device",
+      "chapter": "Send",
+      "title": "A separate\npress to send.",
+      "instruction": "Press A again to send the reviewed message to this session.",
+      "cue": "A  SEND REVIEWED MESSAGE",
+      "narration": "Press A separately to send the reviewed message. An active session receives it in its queue.",
+      "edited_waits": true,
+      "audio": [
+        {
+          "path": "narration/send.aiff",
+          "role": "synthesized_narration",
+          "at": 0.4,
+          "gain_db": -1
+        }
+      ],
+      "device": {
+        "path": "sources/send.mp4",
+        "in": 0,
+        "speed": 1,
+        "hold_last": false
+      }
+    },
+    {
+      "id": "read-reply",
+      "duration": 9,
+      "layout": "device",
+      "chapter": "Read",
+      "title": "Read the reply.\nCrank to scroll.",
+      "instruction": "The test reply is small screen big ideas. The conversation stays available to read.",
+      "cue": "RECORDED TEST CONVERSATION",
+      "narration": "The reply appears in the conversation. Use the crank to read through it. This is the recorded test exchange.",
+      "edited_waits": true,
+      "audio": [
+        {
+          "path": "narration/read-reply.aiff",
+          "role": "synthesized_narration",
+          "at": 0.4,
+          "gain_db": -1
+        }
+      ],
+      "device": {
+        "path": "sources/read-reply.mp4",
+        "in": 0,
+        "speed": 1,
+        "hold_last": false
+      }
+    },
+    {
+      "id": "finish",
+      "duration": 9,
+      "layout": "title",
+      "chapter": "Evener for Playdate",
+      "title": "Small screen.\nBig ideas.",
+      "instruction": "Build instructions and current limitations are in the README.\nReal captures with synthesized narration and demo speech.\nPhone approval was not filmed.",
+      "cue": "PRIMERADIANT.COM",
+      "narration": "The README has the build instructions and current limitations. Evener for Playdate, from Prime Radiant.",
+      "edited_waits": false,
+      "audio": [
+        {
+          "path": "narration/finish.aiff",
+          "role": "synthesized_narration",
+          "at": 0.4,
+          "gain_db": -1
+        }
+      ]
+    }
+  ]
+}

@@ -19,6 +19,17 @@ dictation, review before sending, reading, and the start of sound pairing.
 The [editable production source](tools/promo/README.md) includes the selected
 captures, score generator and rendering instructions.
 
+[![Watch the recorded setup and onboarding walkthrough](docs/media/onboarding-poster.png)](docs/media/evener-playdate-onboarding.mp4)
+
+The [2 minute 34 second onboarding walkthrough](docs/media/evener-playdate-onboarding.mp4)
+explains private installation and sideloading, plays the actual recorded setup
+sound, shows Hub code comparison and approval, then walks through dictation,
+review, sending and a reply. It includes English captions and chapters. The
+phone's Tailscale approval was not filmed and is shown as an explicit instruction
+step. Several recorded takes are combined, with edited waits and synthesized
+narration disclosed. [Editable source and capture provenance](tools/onboarding/README.md)
+describe those boundaries and reproduce the film from selected safe excerpts.
+
 ## On the Playdate
 
 | Browse sessions | Read conversations |

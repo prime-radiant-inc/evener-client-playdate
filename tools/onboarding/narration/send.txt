@@ -1,0 +1,1 @@
+Press A separately to send the reviewed message. An active session receives it in its queue.

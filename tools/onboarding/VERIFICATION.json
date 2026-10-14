@@ -1,0 +1,55 @@
+{
+  "film": "../../docs/media/evener-playdate-onboarding.mp4",
+  "sha256": "4e5ccf78a710f16e3ca759213a2742935a8c2fc1c91a5f6447f8090c53b6557a",
+  "poster_sha256": "529e167a88f20826d13caa2f608c5c211eaf45992484e6b03f68049bbeba1407",
+  "duration_seconds": 154.3,
+  "video_frames": 4629,
+  "width": 1920,
+  "height": 1080,
+  "fps": "30/1",
+  "sample_rate": 48000,
+  "audio_channels": 2,
+  "chapters": 15,
+  "captions": "English mov_text, plus sidecar SRT",
+  "full_audio_video_decode": "passed in render_final.sh",
+  "source_hashes_verified": 28,
+  "selected_clip_rgb_stream_comparisons": 9,
+  "selected_clip_rgb_streams_identical": true,
+  "audio_peak_dbfs": -1.9353556632995605,
+  "audio_full_scale_samples": 0,
+  "chirp_source_correlation": 0.9996167425154829,
+  "chirp_film_seconds": [
+    47.3,
+    53.83
+  ],
+  "chirp_narration_gap_seconds": 0.587075,
+  "voice_chapter_boundary": "Hold/record: original 130.3\u2013136.3 seconds; release/transcribe/review: 136.3\u2013151.3 seconds, contiguous at original speed",
+  "boundaries": [
+    "Phone approval was not filmed; explicit instructional card",
+    "Setup audio and approved enrollment use separate labeled takes",
+    "No continuous onboarding or latency claim",
+    "Narration and original dictated demo speech are synthesized",
+    "Only selected actual setup-sound microphone excerpt is supplied"
+  ],
+  "simplification_review": {
+    "reuse": "clean",
+    "simplification": "resolved generated chapter metadata and unused local",
+    "efficiency": "resolved decoder lifetime and repeated still resize",
+    "altitude": "clean",
+    "verification": {
+      "identical_pixel_comparisons": 18,
+      "backward_proof_seeking": true,
+      "maximum_live_decoder_handles": 2,
+      "decoder_handles_closed_at_end": true,
+      "still_resize_reused": true
+    }
+  },
+  "decoder_failure_regression": {
+    "test_command": "python3 -m unittest -v test_renderer",
+    "tests": 5,
+    "before_fix": "4 failing cases: truncated clip with hold disabled/enabled, clean early decoder exit, and unapproved source overrun",
+    "after_fix": "5 tests passed; complete sequence and explicit final-frame hold still work",
+    "decoder_diagnostics": "Captured actual FFmpeg corrupt-packet diagnostics and verified process/log cleanup",
+    "good_film_after_fix": "Complete rerender and AV decode; byte-identical to delivered film"
+  }
+}

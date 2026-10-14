@@ -1,4 +1,32 @@
-# Evener for Playdate film
+# Evener for Playdate films
+
+## Recorded onboarding walkthrough
+
+The [onboarding walkthrough](evener-playdate-onboarding.mp4) is 2 minutes
+34 seconds at 1920 × 1080 and 30 fps, with stereo AAC, selectable English
+captions and 15 chapters. The [poster](onboarding-poster.png) links to it from
+the repository README; [captions are also available separately](evener-playdate-onboarding.en.srt).
+
+It explains private building and USB sideloading, then uses actual Playdate
+and Hub captures to teach receiving setup sound, comparing the complete code,
+Hub approval, saving, and voice/review/send/reply. Its setup sound is the actual
+room recording from the production receiver take, with narration kept clear of
+both audible blocks.
+
+The phone's Tailscale sign-in and approval were not filmed. That step is an
+explicitly labeled instruction card. The setup sound and approval chapters come
+from different recorded takes, also labeled in the film. Waits are edited;
+narration and the original dictated demonstration speech are synthesized. The
+film is an instructional edit and does not claim continuous enrollment footage
+or a connection-speed measurement.
+
+[Editable source](../../tools/onboarding/README.md) includes the selected
+capture clips and audio, captions, chapters, renderer and
+[provenance](../../tools/onboarding/PROVENANCE.json). Full raw recordings,
+unrelated sessions, private configuration, enrollment identities and mobile
+connection QR material are excluded.
+
+## A little closer
 
 [A little closer](evener-playdate-promo.mp4) is a 58-second product tour at
 1920 × 1080 and 60 frames per second, with stereo AAC audio and the official

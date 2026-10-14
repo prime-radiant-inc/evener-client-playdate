@@ -1,0 +1,77 @@
+1
+00:00:00,400 --> 00:00:08,293
+This walkthrough uses real Playdate and Hub captures. Narration and the
+demonstration speech are synthesized. Waiting periods are edited.
+
+2
+00:00:10,400 --> 00:00:21,306
+Build Evener in setup-only mode with your own OpenAI key. Keep that
+bundle private. Use USB Data Disk mode to copy Evener dot P D X into
+Games, then eject and open it.
+
+3
+00:00:24,200 --> 00:00:29,905
+Open Receive setup. On an existing installation, find it under Actions
+in the system menu.
+
+4
+00:00:30,400 --> 00:00:39,011
+In the Hub, open Settings, Mobile app, then Pair using sound. Check the
+Hub address, choose Tailscale, and create an invitation.
+
+5
+00:00:44,300 --> 00:00:46,713
+Play the setup sound beside your Playdate.
+
+6
+00:00:47,300 --> 00:00:53,830
+[Actual setup sound recorded beside the Playdate]
+
+7
+00:00:55,700 --> 00:01:05,438
+If enrollment is needed, scan the Tailscale code on the Playdate. On
+your phone, sign in and authorize the device on the Hub’s tailnet. Phone
+approval was not recorded.
+
+8
+00:01:09,700 --> 00:01:17,698
+This approval example is from an earlier take. Compare all four lines on
+your own screens. When every group matches, approve in the Hub.
+
+9
+00:01:25,700 --> 00:01:28,940
+The Hub confirms approval. Keep the Playdate connected.
+
+10
+00:01:31,700 --> 00:01:37,977
+Review the destination on the Playdate, then press A to save it. The
+client connects and opens your sessions.
+
+11
+00:01:41,700 --> 00:01:45,778
+Select a session with the crank or D-pad, then press A to open it.
+
+12
+00:01:47,700 --> 00:01:52,085
+Hold A and start speaking immediately. The microphone captures your
+words.
+
+13
+00:01:53,700 --> 00:02:00,743
+Release A to finish recording. Wait for the final text to be saved, then
+read it. The message has not been sent yet.
+
+14
+00:02:08,700 --> 00:02:13,667
+Press A separately to send the reviewed message. An active session
+receives it in its queue.
+
+15
+00:02:16,700 --> 00:02:22,935
+The reply appears in the conversation. Use the crank to read through it.
+This is the recorded test exchange.
+
+16
+00:02:25,700 --> 00:02:31,668
+The README has the build instructions and current limitations. Evener
+for Playdate, from Prime Radiant.
