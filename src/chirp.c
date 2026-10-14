@@ -28,22 +28,24 @@ static int tone(const ChirpDecoder *d) {
     return (int)best;
 }
 static uint32_t little32(const uint8_t *p) { return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
-static void receive_frame(ChirpDecoder *d) {
-    if (d->damaged || pairing_crc(d->frame, 55) != little32(d->frame + 55)) { d->rejected_frames++; return; }
-    unsigned length = (unsigned)d->frame[1] | (unsigned)d->frame[2] << 8;
-    unsigned index = d->frame[0], fragments = (length + CHIRP_FRAGMENT - 1) / CHIRP_FRAGMENT;
-    uint32_t id = little32(d->frame + 3);
-    if (!length || length > PAIRING_MAX_BYTES || index >= fragments) { d->rejected_frames++; return; }
+static bool receive_frame(ChirpDecoder *d, const ChirpPhase *phase) {
+    const uint8_t *frame = phase->frame;
+    if (phase->damaged || pairing_crc(frame, 55) != little32(frame + 55)) return false;
+    unsigned length = (unsigned)frame[1] | (unsigned)frame[2] << 8;
+    unsigned index = frame[0], fragments = (length + CHIRP_FRAGMENT - 1) / CHIRP_FRAGMENT;
+    uint32_t id = little32(frame + 3);
+    if (!length || length > PAIRING_MAX_BYTES || index >= fragments) return false;
     if (d->length != length || d->message_id != id) {
         d->length = length; d->message_id = id; d->received = 0; d->fragments = fragments;
     }
     unsigned count = length - index * CHIRP_FRAGMENT;
     if (count > CHIRP_FRAGMENT) count = CHIRP_FRAGMENT;
-    memcpy(d->bytes + index * CHIRP_FRAGMENT, d->frame + 7, count);
+    memcpy(d->bytes + index * CHIRP_FRAGMENT, frame + 7, count);
     d->received |= 1u << index; d->valid_frames++;
     if (d->received == (1u << fragments) - 1 && pairing_crc(d->bytes, length) != id) {
         d->received = 0; d->rejected_frames++;
     }
+    return true;
 }
 static uint8_t decode_byte(unsigned code) {
     unsigned syndrome = 0, value = 0, bit = 0;
@@ -57,14 +59,20 @@ static void hop(ChirpDecoder *d) {
     int value = tone(d);
     d->history[d->hops % CHIRP_HISTORY] = value;
     if (d->receiving) {
-        if (d->hops == d->next_symbol) {
-            d->next_symbol += CHIRP_SYMBOL_HOPS;
-            if (value < 0) { value = 0; d->damaged = true; }
-            d->codeword |= (unsigned)value << (2 * d->symbols++);
-            if (d->symbols == 6) {
-                d->frame[d->frame_at++] = decode_byte(d->codeword);
-                d->symbols = d->codeword = 0;
-                if (d->frame_at == CHIRP_FRAME_BYTES) { d->receiving = false; receive_frame(d); }
+        if (d->hops >= d->first_symbol) {
+            unsigned index = (d->hops - d->first_symbol) % CHIRP_SYMBOL_HOPS;
+            ChirpPhase *phase = &d->phases[index];
+            if (value < 0) { value = 0; phase->damaged = true; }
+            phase->codeword |= (unsigned)value << (2 * phase->symbols++);
+            if (phase->symbols == 6) {
+                phase->frame[phase->frame_at++] = decode_byte(phase->codeword);
+                phase->symbols = phase->codeword = 0;
+                if (phase->frame_at == CHIRP_FRAME_BYTES) {
+                    if (receive_frame(d, phase)) d->receiving = false;
+                    else if (index == CHIRP_SYMBOL_HOPS - 1) {
+                        d->receiving = false; d->rejected_frames++;
+                    }
+                }
             }
         }
     } else if (d->hops >= CHIRP_HISTORY) {
@@ -72,11 +80,12 @@ static void hop(ChirpDecoder *d) {
         for (unsigned i = 0; i < 8; i++)
             if (d->history[(d->hops - (7 - i) * CHIRP_SYMBOL_HOPS) % CHIRP_HISTORY] != sync_tones[i]) sync = false;
         if (sync) {
-            d->receiving = true; d->damaged = false;
-            d->symbols = d->codeword = d->frame_at = 0;
-            // Detect the leading part of the sync tone, then sample farther
-            // inside each data symbol to allow clock drift and reflections.
-            d->next_symbol = d->hops + CHIRP_SYMBOL_HOPS + 2;
+            d->receiving = true;
+            memset(d->phases, 0, sizeof(d->phases));
+            // Reflections and sample-clock drift move the usable part of a
+            // symbol. Reuse each hop's tone in one bounded phase candidate;
+            // only a complete frame with a valid checksum selects its timing.
+            d->first_symbol = d->hops + CHIRP_SYMBOL_HOPS;
         }
     }
     d->hops++;
