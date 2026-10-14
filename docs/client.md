@@ -72,6 +72,15 @@ direct connection to OpenAI.
 
 ## Navigation and reading
 
+History reads, older pages and reconnects request `includeConversation: true`
+and exclude thinking, tool calls/results, tool-call intents, system messages and
+diagnostics through the Hub's shared history-selection API. The eight-item page
+counts selected conversation items; excluded activity does not consume its slots.
+Metadata-only send preparation uses the same options and retains capabilities,
+mutation authority and receipts while omitting detailed diagnostics. The Hub must
+implement the generic inclusion flags before this client is installed. Opaque
+cursors and snapshot incarnations stay owned by the server.
+
 The Hub's navigation v3 resources own membership and ordering. Live sessions
 are available directly; Projects opens paged Current, Recent and Archived
 session lists. The client reads only root session rows, rather than treating

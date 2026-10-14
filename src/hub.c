@@ -20,6 +20,7 @@ bool hub_ready, hub_loading, hub_has_older, hub_hydrated;
 
 enum Request { REQUEST_NONE, REQUEST_INIT, REQUEST_NAV, REQUEST_READ, REQUEST_OLDER, REQUEST_SEND, REQUEST_RESUME, REQUEST_PREPARE_SEND };
 enum { HISTORY_PAGE_ITEMS = 8 };
+static const char history_content[] = "\"includeConversation\":true,\"includeThinking\":false,\"includeToolCalls\":false,\"includeToolCallIntents\":false,\"includeSystemMessages\":false,\"includeDiagnostics\":false";
 static WebSocket socket;
 static enum Request pending;
 static unsigned serial, request_id, browse_generation, requested_browse;
@@ -461,17 +462,17 @@ void hub_update(void) {
         // downloading conversation history again before dispatch or recovery.
         if (send_prepared) send_draft();
         else {
-            snprintf(params, sizeof(params), "{\"ref\":%s,\"includeTurns\":false}", ref);
+            snprintf(params, sizeof(params), "{\"ref\":%s,\"includeTurns\":false,%s}", ref, history_content);
             request(REQUEST_PREPARE_SEND, "thread/read", params);
         }
     } else if (want_read) {
-        snprintf(params, sizeof(params), "{\"ref\":%s,\"includeTurns\":true,\"subscribe\":true,\"replaceSubscription\":true,\"itemLimit\":%d}", ref, HISTORY_PAGE_ITEMS);
+        snprintf(params, sizeof(params), "{\"ref\":%s,\"includeTurns\":true,\"subscribe\":true,\"replaceSubscription\":true,\"itemLimit\":%d,%s}", ref, HISTORY_PAGE_ITEMS, history_content);
         if (request(REQUEST_READ, "thread/read", params)) want_read = false;
     } else if (want_older && hub_has_older) {
         static char cursor[12291]; json_quote(older_cursor, cursor, sizeof(cursor));
         if (rebase_older && chat_count && !chat[0].overlay)
-            snprintf(params, sizeof(params), "{\"ref\":%s,\"cursor\":%s,\"before\":{\"entry\":%d,\"item\":%d,\"sub\":%d},\"itemLimit\":%d}", ref, cursor, chat[0].entry, chat[0].item, chat[0].sub, HISTORY_PAGE_ITEMS);
-        else snprintf(params, sizeof(params), "{\"ref\":%s,\"cursor\":%s,\"itemLimit\":%d}", ref, cursor, HISTORY_PAGE_ITEMS);
+            snprintf(params, sizeof(params), "{\"ref\":%s,\"cursor\":%s,\"before\":{\"entry\":%d,\"item\":%d,\"sub\":%d},\"itemLimit\":%d,%s}", ref, cursor, chat[0].entry, chat[0].item, chat[0].sub, HISTORY_PAGE_ITEMS, history_content);
+        else snprintf(params, sizeof(params), "{\"ref\":%s,\"cursor\":%s,\"itemLimit\":%d,%s}", ref, cursor, HISTORY_PAGE_ITEMS, history_content);
         if (request(REQUEST_OLDER, "thread/turns/list", params)) want_older = false;
     } else if (want_browse && app_time() >= browse_at) {
         const char *tiers[] = {"current", "recent", "archived"};

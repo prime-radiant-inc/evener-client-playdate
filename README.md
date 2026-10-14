@@ -47,6 +47,9 @@ and [physical qualification report](docs/qualification/2026-10-10-native-client.
 The display includes user messages, assistant messages and human steering.
 Tools, reasoning, images, interactive approval cards and settings are outside
 this client's scope. Use another Evener client for those interactions.
+History reads request conversation-only content from the Hub using the generic
+AppWire inclusion flags. Use a Hub that implements history content selection;
+update the Hub before installing this client build.
 
 ## Configure and build
 
