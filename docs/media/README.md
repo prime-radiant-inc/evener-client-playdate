@@ -1,11 +1,21 @@
 # Evener for Playdate films
 
+The repository README embeds both films using GitHub video attachments. Each
+attachment URL occupies its own Markdown paragraph so GitHub renders an inline
+player with audio controls. The original MP4s remain in this directory.
+
+To replace a film, upload the reviewed MP4 as an attachment to its pull request
+(for example, with `gh pr edit --attach PATH`), verify the uploaded bytes match
+the repository file, then update both its standalone URL and text link in the
+README. Verify playback on the rendered README before merging; a normal link to
+a repository MP4 or a linked poster does not create an inline player.
+
 ## Recorded onboarding walkthrough
 
 The [onboarding walkthrough](evener-playdate-onboarding.mp4) is 2 minutes
 34 seconds at 1920 × 1080 and 30 fps, with stereo AAC, selectable English
-captions and 15 chapters. The [poster](onboarding-poster.png) links to it from
-the repository README; [captions are also available separately](evener-playdate-onboarding.en.srt).
+captions and 15 chapters. Its [poster](onboarding-poster.png) and
+[captions](evener-playdate-onboarding.en.srt) are also available separately.
 
 It explains private building and USB sideloading, then uses actual Playdate
 and Hub captures to teach receiving setup sound, comparing the complete code,
@@ -30,8 +40,7 @@ connection QR material are excluded.
 
 [A little closer](evener-playdate-promo.mp4) is a 58-second product tour at
 1920 × 1080 and 60 frames per second, with stereo AAC audio and the official
-Prime Radiant logo. [The poster](poster.png) links to it from the repository's
-README.
+Prime Radiant logo. [The poster](poster.png) is also available separately.
 
 The film combines actual physical Playdate screen captures with an illustrated
 device, animated typography and an original synthesized score. Recording,
