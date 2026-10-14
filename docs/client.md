@@ -12,7 +12,7 @@ ongoing Mac helper.
 
 An authenticated browser opens **Settings → Mobile app → Pair using sound** and
 creates an invitation for the desired Hub and connection type. The device's
-system menu exposes **Network → Receive setup**; an unconfigured build opens it
+system menu exposes **Actions → Receive setup**; an unconfigured build opens it
 on launch. The browser plays the shared [device invitation](device-pairing.md)
 as sound. It contains the Hub address and a temporary invitation secret, not a
 Hub credential. The microphone queues PCM; the game loop decodes and verifies
@@ -64,7 +64,7 @@ keys before contacting the control service. A sign-in QR opens Tailscale on the
 person's phone, where they choose the Hub's tailnet. The device polls with the
 same pending identity through restarts. Its authenticated map resolves the Hub
 by configured name or IPv4 address, then pins the peer's stable ID for subsequent
-refreshes. **Network → Tailscale sign-in** reopens that status; **Change tailnet**
+refreshes. **Actions → Tailscale sign-in** reopens that status; **Change tailnet**
 requires an explicit A press to create another identity and preserves local
 messages and drafts. The old node remains in Tailscale until removed there.
 Hub approval uses the generic device-pairing endpoint. Voice remains a separate
@@ -74,7 +74,7 @@ direct connection to OpenAI.
 
 History reads, older pages and reconnects request `includeConversation: true`
 and exclude thinking, tool calls/results, tool-call intents, system messages and
-diagnostics through the Hub's shared history-selection API. The eight-item page
+diagnostics through the Hub's shared history-selection API. The ten-item page
 counts selected conversation items; excluded activity does not consume its slots.
 Metadata-only send preparation uses the same options and retains capabilities,
 mutation authority and receipts while omitting detailed diagnostics. The Hub must
@@ -90,15 +90,26 @@ Hub settings, tool output, reasoning or interactive approval controls.
 Selecting a session reads its bounded transcript window and replaces the
 connection's subscription. The device displays user and assistant text plus
 human steering. Recorded updates merge by transcript key and version; streaming
-assistant overlays are retired when their round ends. D-pad and crank scroll
-the transcript; reaching the top loads older items. Scrolling away from the end
-stops automatic following. Latest messages restores the newest window.
+assistant overlays are retired when their round ends. The latest ten items
+become readable before older history is fetched in the background. Navigation
+polling pauses while reading a conversation. D-pad and crank scroll the
+transcript; reaching the top opens older items and the bottom of an older window
+continues toward newer items. Scrolling away from the end stops automatic
+following. Latest restores the newest window.
 
 Transcripts distinguish speakers with outlined assistant bubbles and inverse
 user bubbles instead of repeated labels. Compact type, an inverse header and a
 single-line footer reserve most of the display for conversation text. The footer
 shows connection or session status alongside controls when both fit; longer
-recovery instructions take priority. Navigation displays six rows per screen.
+recovery instructions take priority. A compact animated loading indicator shows
+foreground work without clearing cached text. The system menu's Font option
+changes conversation text and session/project titles between Small, Medium and
+Large. List row heights follow the selected font, displaying six, five or four
+rows respectively while preserving the selected session or project. Conversation
+reflow preserves the current message and relative reading position. The choice
+persists on the device across launches and Hub changes; headers, controls and
+list metadata remain compact. Trailing whitespace contributes no blank space
+below message text; internal paragraphs remain intact.
 
 The client composes each screen in an offscreen bitmap before copying changed
 pixel rows to the display buffer. An unchanged frame requests no display update,
@@ -108,11 +119,14 @@ path; input, recording and networking continue on every update.
 
 Opened navigation pages and conversation windows are cached in the device's
 data directory, preserving reading across disconnects and restarts. The client
-shows saved content while it refreshes. A successful fresh read replaces the
-startup cache; a failed refresh leaves it readable. History requests use eight
-projected items per page, with older items fetched as the person scrolls or when
-the first page contains too few chat messages. Cached content never grants send
-capabilities or establishes mutation acceptance.
+shows saved content while it refreshes. A fresh read updates the newest messages
+while preserving an older reading position; a failed refresh leaves the saved
+window readable. Older pages fill a disk
+archive without changing the visible reading window. The client retains at most
+64 messages in RAM and moves through overlapping windows as the person scrolls.
+Snapshot identity and server cursors fence the archived pages. Foreground reads,
+dictation and sends take priority over background loading. Cached content never
+grants send capabilities or establishes mutation acceptance.
 
 ## Voice and delivery
 
@@ -124,7 +138,7 @@ OpenAI Realtime and shows partial captions when available. Finalized, saved text
 remains in review; a separate A press from that review sends it. A button press
 during finalization cannot become a send when the caption arrives in that frame.
 B preserves the selected session's text and unfinished audio. Discard draft is
-an explicit system-menu action.
+an explicit action under the system menu's Actions entry.
 
 The microphone callback writes only to a bounded atomic ring. The game loop
 flushes small batches to a session-bound audio spool, retaining speech captured
@@ -246,7 +260,11 @@ The device needs exclusive networking
 resources to open its Tailscale connections: maintenance pauses the relay across
 its key fetch and authenticated map request, then automatically restores Hub reading.
 An established relay can remain connected while transcription runs. Dictation
-preempts or defers maintenance, and a relay that disconnects during dictation
+preempts or defers maintenance. Foreground conversation loads and sends on an
+established Hub connection also defer routine maintenance while both the current
+identity and peer remain authorized and unexpired. Reconnects allow map refreshes,
+and expired authorization still requires a fresh map.
+A relay that disconnects during dictation
 waits for transcription to finish before reopening. Cached conversation text and
 captured audio remain available throughout. Waiting for connection admission
 does not consume the actual connection timeout. Completed transcription releases
@@ -283,9 +301,9 @@ reachability belongs to the device's configured network, independent of the Mac.
 
 The client bounds navigation pages, transcript rows, individual messages, voice
 drafts, audio recordings and protocol queues. Oversized text is labelled; the
-complete transcript remains authoritative on the Hub. The current protocol can
-include large tool payloads in transcript responses even when this client
-displays only chat, and a frame above its 2 MiB limit cannot be read. See the
+complete transcript remains authoritative on the Hub. The Hub excludes content
+the client does not request before applying history page limits; a frame above
+the device's 2 MiB limit still cannot be read. See the
 client README for exact bounds, build requirements and controls. All handheld
 sources and vendor dependencies are inside the client directory; the audio code
 does not depend on the separate transcription spike.

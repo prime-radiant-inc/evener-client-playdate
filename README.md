@@ -17,8 +17,14 @@ and [physical qualification report](docs/qualification/2026-10-10-native-client.
   Projects. Inside a project, left/right switches Current, Recent and Archived.
   Select More sessions for the next page; B returns to the previous page/view.
 - **Conversation:** crank or up/down scrolls. Scrolling to the top requests
-  older history. B returns to sessions. The system menu's Latest messages
-  action returns to the newest text.
+  older history; scrolling to the bottom of an older window continues toward
+  newer messages. The newest ten messages arrive first, then earlier history
+  loads into the device's cache in the background. B returns to sessions.
+  The system menu's Latest action returns to the newest text.
+- **Text size:** the system menu's Font option selects Small, Medium or Large.
+  It sizes conversation text and session/project titles; lists show six, five or
+  four rows respectively. The device remembers the choice, keeps the selected
+  list row and preserves your place when conversation text reflows.
 - **Voice:** when the conversation says Hold A Dictate, hold A and speak
   immediately. The microphone starts before network work; connecting or retrying
   does not postpone capture.
@@ -30,22 +36,22 @@ and [physical qualification report](docs/qualification/2026-10-10-native-client.
   An empty text draft with retained audio says A Transcribe saved audio, including
   in an empty conversation; that action restores the recording instead of starting
   the microphone. A Review draft opens text already saved for review.
-  Use Discard draft in the system menu to replace it explicitly. Partial text
+  Use Actions → Discard draft in the system menu to replace it explicitly. Partial text
   remains visible through retranscription and cannot be submitted as a final
   message. A failed final text save keeps the audio and requires a successful
   save before sending.
 - **Offline reading:** previously opened session pages and conversation windows
   are saved on the device. Reopening shows the saved copy while reconnecting;
-  sending waits for a fresh session snapshot. Latest messages keeps the visible
+  sending waits for a fresh session snapshot. Latest keeps the visible
   conversation until its replacement arrives.
-- **Network:** the system menu's Network option offers Reconnect, Receive setup,
+- **Network:** the system menu's Actions option offers Reconnect, Receive setup,
   Tailscale sign-in and Change tailnet. Receive setup listens for a Hub invitation
   played by the Web UI's Pair using sound screen. Approve the matching fingerprint
   in that browser, then press A on the Playdate to save, or B to cancel. Change tailnet asks
   before creating a new native identity and keeps saved messages and drafts.
 
 The display includes user messages, assistant messages and human steering.
-Tools, reasoning, images, interactive approval cards and settings are outside
+Tools, reasoning, images, interactive approval cards and Hub settings are outside
 this client's scope. Use another Evener client for those interactions.
 History reads request conversation-only content from the Hub using the generic
 AppWire inclusion flags. Use a Hub that implements history content selection;
@@ -133,11 +139,13 @@ distribute the private PDX.
 
 ## Ownership and limits
 
-The 400 × 240 layout shows six sessions per screen. Transcripts use outlined
-assistant bubbles and inverse user bubbles, with a compact inverse header and
-one footer line. Body text uses the system Roobert 10 font; the bundled Nontendo
-Light font by Shaun Inman (from the Playdate SDK) supplies compact metadata and
-controls. Long recovery instructions take priority over footer control hints.
+The 400 × 240 layout shows six, five or four session/project rows for Small,
+Medium or Large text. List titles and conversation text use the chosen system
+font, with Roobert 10 as the default. Transcripts use outlined assistant bubbles
+and inverse user bubbles, with a compact inverse header and one footer line.
+The bundled Nontendo Light font by Shaun Inman (from the Playdate SDK) supplies
+compact metadata and controls. Long recovery instructions take priority over
+footer control hints.
 
 The firmware's game task has a fixed 10 KB stack, including SDK calls. Large
 encoding and cache buffers use static storage on the serial game loop. The ARM
@@ -195,6 +203,9 @@ build writes `.su` stack-usage reports and rejects individual frames above
   saved map; later starts can use that saved map during a control-service outage.
   Control maintenance holds exclusive SDK access across key fetch and map, then
   automatically reconnects the relay. Dictation preempts or defers maintenance.
+  Foreground conversation loads and sends on an established Hub connection also
+  defer routine maintenance while the saved identity and peer remain authorized
+  and unexpired. Reconnects remain free to refresh a stale map.
   The established relay can coexist with transcription, but a relay reconnect
   waits for transcription to release its socket before starting its handshake.
   If renewal needs sign-in, the device
@@ -245,21 +256,22 @@ build writes `.su` stack-usage reports and rejects individual frames above
   an authoritative mutation snapshot. A refused send returns to review.
 - The first caption is saved immediately, followed by updates at most once per
   second and on finalization or leaving the composer. `cache.c` saves bounded
-  navigation pages and chat windows with checksums and recoverable temporary files.
+  navigation pages and chat windows, plus older history pages, with checksums
+  and recoverable temporary files. Background history reads do not replace the
+  visible window; scrolling selects older or newer pages from that archive.
   Cached transcripts provide reading context; the Hub remains authoritative.
 - The device retains 64 chat messages, at most 32 KiB of text per message,
   8 KiB voice drafts, 20 navigation rows per page and 2 MiB incoming WebSocket
   messages. Audio recordings are capped at two minutes (960000 mu-law bytes);
   the capture ring holds 32768 samples. Reaching the cap or overflowing that
   ring stops capture and keeps the accepted audio with a review warning.
-  Oversized chat text is explicitly marked. Older history replaces
-  the newest rows when the window fills; Latest messages restores the tail.
+  Oversized chat text is explicitly marked. Reading windows stay bounded as
+  scrolling moves through the disk archive; Latest restores the tail.
   The system fonts do not contain every Unicode glyph.
 
-Large tool payloads still travel in the Hub's existing transcript protocol even
-though the device discards them. A response beyond the device's message limit
-cannot be displayed. Session creation, transcript export and editing typed text
-are not implemented.
+The Hub excludes unrequested tool and reasoning content before paging. A response
+beyond the device's message limit still cannot be displayed. Session creation,
+transcript export and editing typed text are not implemented.
 
 ## Verification
 
@@ -312,6 +324,14 @@ EVENER_PAIRING_E2E=1 go test ./cmd/evener-hub -run TestDevicePairingBrowserRound
 
 These optional interoperability checks need both repositories; the app build and
 local storage/socket checks need only this repository and the SDK.
+
+SDK or serial crank injection can disable physical crank updates. After any
+such check, turn off Simulator device control, quit Simulator, and issue the
+console's `enablecrank` command before handing the device back. Qualification
+helpers that inject crank movement must restore it in their cleanup path, even
+when a check fails. Confirm scrolling with the physical crank before finishing
+device qualification; injected movement alone does not verify the hardware input
+path.
 
 The browser check runs real Web Audio at desktop and phone sizes, generates a
 shared invitation QR and sound, decodes both, approves through a real local Hub,
