@@ -17,6 +17,14 @@ on launch. The browser plays the shared [device invitation](device-pairing.md)
 as sound. It contains the Hub address and a temporary invitation secret, not a
 Hub credential. The microphone queues PCM; the game loop decodes and verifies
 complete fragments. Repeated playback repairs missing fragments.
+The listening screen shows a live microphone peak meter independently of the
+received-fragment percentage. Its six-decibel steps show quiet input, with a
+short decay between sounds; meter movement indicates microphone input, while
+the percentage advances only for verified fragments. The SDK console reports
+input sample counts, peak level, clipping, buffer interruptions and accepted or
+rejected frames once per second while listening. Audio decoding and display work
+stay on the game loop; the microphone callback only queues PCM and measures
+integer peaks and clipping.
 
 The device generates an ephemeral key and contacts the advertised Hub. Both
 screens independently show the same 128-bit comparison fingerprint as four lines
