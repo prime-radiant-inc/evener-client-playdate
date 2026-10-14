@@ -22,7 +22,7 @@ static ControlConfig current;
 static Channel relay, controller;
 static Access relay_access, control_access;
 static bool mapped, enabled, reauth, renewal_pending, current_only, map_phase, relay_pinning;
-static bool maintenance, voice_active;
+static bool maintenance, voice_active, hub_active;
 static bool replacing_identity;
 static ControlConfig replacement;
 static char auth_url[1024], notice[1100];
@@ -211,8 +211,19 @@ static bool same_transport(const TailnetConfig *a, const TailnetConfig *b) {
         !memcmp(a->disco_private, b->disco_private, 32) && !memcmp(a->disco_public, b->disco_public, 32) &&
         !memcmp(a->peer_disco, b->peer_disco, 32) && a->derp_region == b->derp_region;
 }
+static bool usable_map(void) {
+    uint64_t now = tn_unix_ms();
+    return mapped && !reauth &&
+        (!current.node_expiry_ms || now < current.node_expiry_ms) &&
+        (!current.peer_expiry_ms || now < current.peer_expiry_ms);
+}
+static void postpone_maintenance(void) {
+    // Staged renewal keys are durable; foreground work can use the current map.
+    disconnect(&controller); control_stop(); map_phase = maintenance = false;
+    control_retry = tn_now_ms() + (mapped ? 60000 : 0);
+}
 static void control_update(void) {
-    if (voice_active) return;
+    if (voice_active || (hub_active && usable_map())) return;
     if (!maintenance) {
         if (!due(control_retry) || !access_allowed(&control_access, CONTROL_HOST, 443,
             "Maintain this Playdate's Tailscale identity and Hub connection.")) return;
@@ -300,11 +311,13 @@ static void control_update(void) {
 void tailnet_device_set_voice_active(bool active) {
     if (active && !voice_active && maintenance) {
         // Capture and its saved audio have priority over routine maintenance.
-        // Any staged renewal key is already durable and remains available.
-        disconnect(&controller); control_stop(); map_phase = maintenance = false;
-        control_retry = tn_now_ms() + (mapped ? 60000 : 0);
+        postpone_maintenance();
     }
     voice_active = active;
+}
+void tailnet_device_set_hub_active(bool active) {
+    if (active && !hub_active && maintenance && usable_map()) postpone_maintenance();
+    hub_active = active;
 }
 static bool has_pin(void) {
     uint8_t any = 0; for (unsigned i = 0; i < 32; i++) any |= current.tailnet.derp_public[i];
@@ -341,7 +354,7 @@ void tailnet_device_start(void) {
 void tailnet_device_stop(void) {
     enabled = false;
     disconnect(&relay); disconnect(&controller);
-    tn_stop(); control_stop(); map_phase = maintenance = voice_active = false;
+    tn_stop(); control_stop(); map_phase = maintenance = voice_active = hub_active = false;
     relay_retry = control_retry = tn_now_ms();
 }
 const char *tailnet_device_status(void) { return status; }
