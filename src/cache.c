@@ -89,6 +89,26 @@ bool cache_load_navigation(void) {
     navigation_count = header.count; navigation_remaining = header.remaining; navigation_revision++;
     return true;
 }
+static void write_chat_row(Stream *stream, const ChatMessage *message) {
+    ChatMessage row = *message; row.text = NULL;
+    uint32_t length = message->text ? strlen(message->text) : 0;
+    transfer(stream, &row, sizeof(row)); transfer(stream, &length, sizeof(length));
+    if (length) transfer(stream, message->text, length);
+}
+static uint32_t read_chat_row(Stream *stream, ChatMessage *row) {
+    uint32_t length = 0;
+    transfer(stream, row, sizeof(*row)); row->text = NULL;
+    transfer(stream, &length, sizeof(length));
+    stream->ok = stream->ok && length < 32768 && memchr(row->key, 0, sizeof(row->key)) &&
+        memchr(row->round, 0, sizeof(row->round)) && memchr(row->stream, 0, sizeof(row->stream));
+    return length;
+}
+static void read_chat_text(Stream *stream, ChatMessage *row, uint32_t length) {
+    if (!stream->ok) return;
+    row->text = malloc(length + 1);
+    if (!row->text) { stream->ok = false; return; }
+    transfer(stream, row->text, length); row->text[length] = 0;
+}
 bool cache_save_chat(void) {
     static Header header; key(&header, false);
     header.row_size = sizeof(ChatMessage); header.count = chat_count;
@@ -96,10 +116,7 @@ bool cache_save_chat(void) {
     Stream stream = open_cache(&header, true);
     transfer(&stream, &header, sizeof(header));
     for (int i = 0; stream.ok && i < chat_count; i++) {
-        ChatMessage row = chat[i]; row.text = NULL;
-        uint32_t length = chat[i].text ? strlen(chat[i].text) : 0;
-        transfer(&stream, &row, sizeof(row)); transfer(&stream, &length, sizeof(length));
-        if (length) transfer(&stream, chat[i].text, length);
+        write_chat_row(&stream, &chat[i]);
     }
     return finish(&stream, &header);
 }
@@ -110,15 +127,8 @@ bool cache_load_chat(void) {
     memset(rows, 0, sizeof(rows));
     if (read_header(&stream, &header, &expected, sizeof(ChatMessage), CHAT_CAPACITY)) {
         for (unsigned i = 0; stream.ok && i < header.count; i++) {
-            uint32_t length = 0;
-            transfer(&stream, &rows[i], sizeof(rows[i])); rows[i].text = NULL;
-            transfer(&stream, &length, sizeof(length));
-            stream.ok = stream.ok && length < 32768 && memchr(rows[i].key, 0, sizeof(rows[i].key)) &&
-                memchr(rows[i].round, 0, sizeof(rows[i].round)) && memchr(rows[i].stream, 0, sizeof(rows[i].stream));
-            if (!stream.ok) break;
-            rows[i].text = malloc(length + 1);
-            if (!rows[i].text) { stream.ok = false; break; }
-            transfer(&stream, rows[i].text, length); rows[i].text[length] = 0;
+            uint32_t length = read_chat_row(&stream, &rows[i]);
+            read_chat_text(&stream, &rows[i], length);
         }
     }
     if (!finish(&stream, &expected)) {
@@ -203,10 +213,7 @@ bool cache_save_history_page(const HistoryCache *history, int page, const ChatMe
     bounds.checksum = checksum(stream.checksum, &bounds, offsetof(PageBounds, checksum));
     transfer(&stream, &bounds, sizeof(bounds));
     for (int i = 0; stream.ok && i < count; i++) {
-        ChatMessage row = rows[i]; row.text = NULL;
-        uint32_t length = rows[i].text ? strlen(rows[i].text) : 0;
-        transfer(&stream, &row, sizeof(row)); transfer(&stream, &length, sizeof(length));
-        if (length) transfer(&stream, rows[i].text, length);
+        write_chat_row(&stream, &rows[i]);
     }
     return finish(&stream, &header);
 }
@@ -218,16 +225,10 @@ bool cache_load_history_page(const HistoryCache *history, int page, ChatMessage 
         PageBounds bounds;
         if (page_bounds(&stream, &expected, &header, &bounds)) {
             for (unsigned i = 0; stream.ok && i < header.count; i++) {
-                uint32_t length = 0;
-                transfer(&stream, &rows[i], sizeof(rows[i])); rows[i].text = NULL;
-                transfer(&stream, &length, sizeof(length));
-                stream.ok = stream.ok && length < 32768 && memchr(rows[i].key, 0, sizeof(rows[i].key)) &&
-                    memchr(rows[i].round, 0, sizeof(rows[i].round)) && memchr(rows[i].stream, 0, sizeof(rows[i].stream)) &&
-                    !rows[i].overlay && (!i || compare_position(position(&rows[i - 1]), position(&rows[i])) <= 0);
-                if (!stream.ok) break;
-                rows[i].text = malloc(length + 1);
-                if (!rows[i].text) { stream.ok = false; break; }
-                transfer(&stream, rows[i].text, length); rows[i].text[length] = 0;
+                uint32_t length = read_chat_row(&stream, &rows[i]);
+                stream.ok = stream.ok && !rows[i].overlay &&
+                    (!i || compare_position(position(&rows[i - 1]), position(&rows[i])) <= 0);
+                read_chat_text(&stream, &rows[i], length);
             }
             if (stream.ok && header.count)
                 stream.ok = !compare_position(bounds.first, position(&rows[0])) &&
