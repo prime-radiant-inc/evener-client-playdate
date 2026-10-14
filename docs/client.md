@@ -95,19 +95,21 @@ become readable before older history is fetched in the background. Navigation
 polling pauses while reading a conversation. D-pad and crank scroll the
 transcript; reaching the top opens older items and the bottom of an older window
 continues toward newer items. Scrolling away from the end stops automatic
-following. Latest messages restores the newest window.
+following. Latest restores the newest window.
 
 Transcripts distinguish speakers with outlined assistant bubbles and inverse
 user bubbles instead of repeated labels. Compact type, an inverse header and a
 single-line footer reserve most of the display for conversation text. The footer
 shows connection or session status alongside controls when both fit; longer
 recovery instructions take priority. A compact animated loading indicator shows
-foreground work without clearing cached text. Navigation displays six rows per
-screen. The system menu's Font option changes body text between Small, Medium
-and Large while preserving the current message and relative reading position.
-The choice persists on the device across launches and Hub changes; headers,
-controls and navigation remain compact. Trailing whitespace contributes no
-blank space below message text; internal paragraphs remain intact.
+foreground work without clearing cached text. The system menu's Font option
+changes conversation text and session/project titles between Small, Medium and
+Large. List row heights follow the selected font, displaying six, five or four
+rows respectively while preserving the selected session or project. Conversation
+reflow preserves the current message and relative reading position. The choice
+persists on the device across launches and Hub changes; headers, controls and
+list metadata remain compact. Trailing whitespace contributes no blank space
+below message text; internal paragraphs remain intact.
 
 The client composes each screen in an offscreen bitmap before copying changed
 pixel rows to the display buffer. An unchanged frame requests no display update,

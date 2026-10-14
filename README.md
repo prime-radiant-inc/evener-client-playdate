@@ -20,9 +20,11 @@ and [physical qualification report](docs/qualification/2026-10-10-native-client.
   older history; scrolling to the bottom of an older window continues toward
   newer messages. The newest ten messages arrive first, then earlier history
   loads into the device's cache in the background. B returns to sessions.
-  The system menu's Latest messages action returns to the newest text.
+  The system menu's Latest action returns to the newest text.
 - **Text size:** the system menu's Font option selects Small, Medium or Large.
-  The device remembers the choice and keeps your place when the text reflows.
+  It sizes conversation text and session/project titles; lists show six, five or
+  four rows respectively. The device remembers the choice, keeps the selected
+  list row and preserves your place when conversation text reflows.
 - **Voice:** when the conversation says Hold A Dictate, hold A and speak
   immediately. The microphone starts before network work; connecting or retrying
   does not postpone capture.
@@ -40,7 +42,7 @@ and [physical qualification report](docs/qualification/2026-10-10-native-client.
   save before sending.
 - **Offline reading:** previously opened session pages and conversation windows
   are saved on the device. Reopening shows the saved copy while reconnecting;
-  sending waits for a fresh session snapshot. Latest messages keeps the visible
+  sending waits for a fresh session snapshot. Latest keeps the visible
   conversation until its replacement arrives.
 - **Network:** the system menu's Actions option offers Reconnect, Receive setup,
   Tailscale sign-in and Change tailnet. Receive setup listens for a Hub invitation
@@ -137,12 +139,13 @@ distribute the private PDX.
 
 ## Ownership and limits
 
-The 400 × 240 layout shows six sessions per screen. Transcripts use outlined
-assistant bubbles and inverse user bubbles, with a compact inverse header and
-one footer line. Body text offers three system font sizes, with Roobert 10 as
-the default; the bundled Nontendo
-Light font by Shaun Inman (from the Playdate SDK) supplies compact metadata and
-controls. Long recovery instructions take priority over footer control hints.
+The 400 × 240 layout shows six, five or four session/project rows for Small,
+Medium or Large text. List titles and conversation text use the chosen system
+font, with Roobert 10 as the default. Transcripts use outlined assistant bubbles
+and inverse user bubbles, with a compact inverse header and one footer line.
+The bundled Nontendo Light font by Shaun Inman (from the Playdate SDK) supplies
+compact metadata and controls. Long recovery instructions take priority over
+footer control hints.
 
 The firmware's game task has a fixed 10 KB stack, including SDK calls. Large
 encoding and cache buffers use static storage on the serial game loop. The ARM
@@ -263,7 +266,7 @@ build writes `.su` stack-usage reports and rejects individual frames above
   the capture ring holds 32768 samples. Reaching the cap or overflowing that
   ring stops capture and keeps the accepted audio with a review warning.
   Oversized chat text is explicitly marked. Reading windows stay bounded as
-  scrolling moves through the disk archive; Latest messages restores the tail.
+  scrolling moves through the disk archive; Latest restores the tail.
   The system fonts do not contain every Unicode glyph.
 
 The Hub excludes unrequested tool and reasoning content before paging. A response
@@ -322,10 +325,13 @@ EVENER_PAIRING_E2E=1 go test ./cmd/evener-hub -run TestDevicePairingBrowserRound
 These optional interoperability checks need both repositories; the app build and
 local storage/socket checks need only this repository and the SDK.
 
-After controlling hardware through the Simulator, turn off its device-control
-mode and restore physical crank updates with the console's `enablecrank` command.
-Confirm scrolling with the physical crank before finishing device qualification;
-injected crank movement alone does not verify the hardware input path.
+SDK or serial crank injection can disable physical crank updates. After any
+such check, turn off Simulator device control, quit Simulator, and issue the
+console's `enablecrank` command before handing the device back. Qualification
+helpers that inject crank movement must restore it in their cleanup path, even
+when a check fails. Confirm scrolling with the physical crank before finishing
+device qualification; injected movement alone does not verify the hardware input
+path.
 
 The browser check runs real Web Audio at desktop and phone sizes, generates a
 shared invitation QR and sound, decodes both, approves through a real local Hub,

@@ -16,7 +16,7 @@ PlaydateAPI *pd;
 Configuration config;
 static LCDFont *font, *small_font, *body_fonts[3], *measured_font;
 static LCDBitmap *canvas;
-enum { MARGIN = 8, CONTENT_TOP = 24, CONTENT_HEIGHT = 196, FOOTER_TOP = 224, SESSION_ROWS = 6, BUBBLE_WIDTH = 374 };
+enum { MARGIN = 8, CONTENT_TOP = 24, CONTENT_HEIGHT = 196, FOOTER_TOP = 224, BUBBLE_WIDTH = 374 };
 enum Screen { SCREEN_SESSIONS, SCREEN_TRANSCRIPT, SCREEN_COMPOSER, SCREEN_AUTH };
 static enum Screen screen;
 static int permission_step, scroll, selection, content_height;
@@ -198,7 +198,7 @@ static void initialize_reader(void) {
     static const char *font_options[] = {"Small", "Medium", "Large"};
     font_menu = pd->system->addOptionsMenuItem("Font", font_options, 3, font_action, NULL);
     pd->system->setMenuItemValue(font_menu, font_size);
-    pd->system->addMenuItem("Latest messages", latest, NULL);
+    pd->system->addMenuItem("Latest", latest, NULL);
     pd->system->addMenuItem("Actions", show_actions, NULL);
 }
 static void draw_authorization(void) {
@@ -461,13 +461,17 @@ static void draw(void) {
     if (screen == SCREEN_SESSIONS) {
         int total = navigation_count + (navigation_remaining > 0);
         if (selection >= total) selection = total ? total - 1 : 0;
-        int start = selection / SESSION_ROWS * SESSION_ROWS;
-        for (int i = start; i < total && i < start + SESSION_ROWS; i++) {
-            int y = CONTENT_TOP + (i - start) * 30;
+        int title_height = pd->graphics->getFontHeight(font);
+        int row_size = title_height + pd->graphics->getFontHeight(small_font) + 3;
+        int visible_rows = CONTENT_HEIGHT / row_size;
+        if (visible_rows < 1) visible_rows = 1;
+        int start = selection / visible_rows * visible_rows;
+        for (int i = start; i < total && i < start + visible_rows; i++) {
+            int y = CONTENT_TOP + (i - start) * row_size;
             bool picked = i == selection;
-            if (picked) { pd->graphics->fillRect(4, y - 1, 392, 29, kColorBlack); pd->graphics->setDrawMode(kDrawModeFillWhite); }
-            line(body_fonts[0], i < navigation_count ? navigation[i].title : "More sessions...", MARGIN, y, 384);
-            line(small_font, i < navigation_count ? navigation[i].state : "Next page", MARGIN, y + 16, 384);
+            if (picked) { pd->graphics->fillRect(4, y - 1, 392, row_size, kColorBlack); pd->graphics->setDrawMode(kDrawModeFillWhite); }
+            line(font, body_text(i < navigation_count ? navigation[i].title : "More sessions..."), MARGIN, y, 384);
+            line(small_font, i < navigation_count ? navigation[i].state : "Next page", MARGIN, y + title_height + 2, 384);
             pd->graphics->setFont(font); pd->graphics->setDrawMode(kDrawModeCopy);
         }
         if (!total) text("No sessions in this view.", MARGIN, 40, 384, 80);
