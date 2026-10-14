@@ -14,7 +14,7 @@
 
 PlaydateAPI *pd;
 Configuration config;
-static LCDFont *font, *small_font;
+static LCDFont *font, *small_font, *body_fonts[3], *measured_font;
 static LCDBitmap *canvas;
 enum { MARGIN = 8, CONTENT_TOP = 24, CONTENT_HEIGHT = 196, FOOTER_TOP = 224, SESSION_ROWS = 6, BUBBLE_WIDTH = 374 };
 enum Screen { SCREEN_SESSIONS, SCREEN_TRANSCRIPT, SCREEN_COMPOSER, SCREEN_AUTH };
@@ -23,12 +23,17 @@ static int permission_step, scroll, selection, content_height;
 static int row_y[CHAT_CAPACITY], row_height[CHAT_CAPACITY], row_width[CHAT_CAPACITY], measured_revision = -1;
 static char measured_keys[CHAT_CAPACITY][192];
 static int measured_count;
+static LCDFont *composer_font;
+static int composer_height;
+static size_t row_text_length[CHAT_CAPACITY];
 static float crank_remainder;
 static bool permission_pending, permissions_ready, follow = true;
 static bool recording_started, final_saved, saved_audio;
 static float saved_at, save_retry_at, repeat_at;
 static char error[256];
-static PDMenuItem *network_menu;
+static PDMenuItem *font_menu;
+static bool actions_open;
+static int action_selection, font_size;
 static enum Screen before_pairing;
 static bool seed_ready, setup_requested, change_tailnet;
 static float network_restart_at;
@@ -120,11 +125,8 @@ static void receive_setup(void) {
     before_pairing = screen;
     if (!pairing_begin()) { snprintf(hub_status, sizeof(hub_status), "Finish the microphone prompt, then retry setup."); hub_connect(); }
 }
-static void network_action(void *context) {
-    (void)context;
+static void network_action(int choice) {
     if (network_restarting) return;
-    int choice = pd->system->getMenuItemValue(network_menu);
-    pd->system->setMenuItemValue(network_menu, 0);
     if (choice == 1) receive_setup();
     else if ((choice == 2 || choice == 3) && !pairing_active()) {
         if (recording_started && !save_voice()) return;
@@ -136,6 +138,68 @@ static void network_action(void *context) {
         screen = SCREEN_AUTH; change_tailnet = choice == 3 && config.use_tailnet;
     }
     else if (!pairing_active() && settings_ready()) reconnect(NULL);
+}
+static void show_actions(void *context) {
+    (void)context;
+    if (network_restarting || pairing_active()) return;
+    actions_open = true; action_selection = 0; crank_remainder = 0;
+}
+static int read_font_size(const char *path) {
+    unsigned char record[9];
+    SDFile *file = pd->file->open(path, kFileReadData);
+    if (!file) return -1;
+    int count = pd->file->read(file, record, sizeof(record));
+    pd->file->close(file);
+    return count == 8 && !memcmp(record, "EVFONT1", 7) && record[7] < 3 ? record[7] : -1;
+}
+static bool save_font_size(int choice) {
+    // A complete temporary record remains readable if device rename must wait
+    // until the next launch. Preferences apply to this device across Hubs.
+    unsigned char record[8] = "EVFONT1";
+    record[7] = (unsigned char)choice;
+    SDFile *file = pd->file->open("reading-font.tmp", kFileWrite);
+    if (!file) return false;
+    bool ok = pd->file->write(file, record, sizeof(record)) == sizeof(record) && pd->file->flush(file) >= 0;
+    if (pd->file->close(file)) ok = false;
+    if (ok) storage_replace("reading-font.tmp", "reading-font.bin");
+    return ok;
+}
+static bool select_font(int choice) {
+    static const char *paths[] = {"/System/Fonts/Roobert-10-Bold.pft", "/System/Fonts/Roobert-11-Bold.pft", "/System/Fonts/Roobert-20-Medium-extended.pft"};
+    if (!body_fonts[choice]) {
+        const char *reason = NULL;
+        body_fonts[choice] = pd->graphics->loadFont(paths[choice], &reason);
+        if (!body_fonts[choice]) return false;
+    }
+    font_size = choice; font = body_fonts[choice];
+    return true;
+}
+static void font_action(void *context) {
+    (void)context;
+    if (network_restarting) return;
+    int choice = pd->system->getMenuItemValue(font_menu);
+    int previous = font_size;
+    if (!select_font(choice)) {
+        snprintf(hub_status, sizeof(hub_status), "Could not load that font.");
+        pd->system->setMenuItemValue(font_menu, previous);
+    } else if (!save_font_size(choice)) {
+        snprintf(hub_status, sizeof(hub_status), "Font changed. Could not save it for next time.");
+    }
+    crank_remainder = 0;
+}
+static void initialize_reader(void) {
+    const char *reason = NULL;
+    select_font(0);
+    small_font = pd->graphics->loadFont("fonts/Nontendo-Light", &reason);
+    int saved = read_font_size("reading-font.tmp");
+    if (saved >= 0) storage_replace("reading-font.tmp", "reading-font.bin");
+    else saved = read_font_size("reading-font.bin");
+    if (saved >= 0) select_font(saved);
+    static const char *font_options[] = {"Small", "Medium", "Large"};
+    font_menu = pd->system->addOptionsMenuItem("Font", font_options, 3, font_action, NULL);
+    pd->system->setMenuItemValue(font_menu, font_size);
+    pd->system->addMenuItem("Latest messages", latest, NULL);
+    pd->system->addMenuItem("Actions", show_actions, NULL);
 }
 static void draw_authorization(void) {
     pd->graphics->clear(kColorWhite); pd->graphics->setFont(small_font);
@@ -270,12 +334,68 @@ static void footer(const char *primary, const char *secondary) {
     }
     pd->graphics->setFont(font);
 }
-static void bubble(const char *value, int x, int y, int width, int height, bool user, bool clipped) {
+static const char *body_text(const char *value) {
+    if (font_size != 2 || !strstr(value, "\xe2\x80")) return value;
+    // The large SDK font omits typographic dashes and quotes. Use plain
+    // equivalents for display while retaining the original transcript/draft.
+    static char display[32769];
+    size_t source = 0, target = 0;
+    while (value[source] && target < sizeof(display) - 1) {
+        unsigned char mark = (unsigned char)value[source];
+        char replacement = 0;
+        if (mark == 0xe2 && (unsigned char)value[source + 1] == 0x80) {
+            unsigned char punctuation = (unsigned char)value[source + 2];
+            if (punctuation == 0x93 || punctuation == 0x94) replacement = '-';
+            else if (punctuation == 0x98 || punctuation == 0x99) replacement = '\'';
+            else if (punctuation == 0x9c || punctuation == 0x9d) replacement = '"';
+        }
+        display[target++] = replacement ? replacement : value[source];
+        source += replacement ? 3 : 1;
+    }
+    display[target] = 0;
+    return display;
+}
+static size_t display_length(const char *value) {
+    size_t end = strlen(value), characters = 0;
+    while (end && (value[end - 1] == '\n' || value[end - 1] == '\r' || value[end - 1] == ' ' || value[end - 1] == '\t')) end--;
+    // The SDK length is a count of Unicode codepoints, not UTF-8 bytes.
+    for (size_t i = 0; i < end; i++) if (((unsigned char)value[i] & 0xc0) != 0x80) characters++;
+    return characters;
+}
+static void spinner(int x, int y, int radius, LCDColor color) {
+    static const int dx[] = {0, 7, 10, 7, 0, -7, -10, -7};
+    static const int dy[] = {-10, -7, 0, 7, 10, 7, 0, -7};
+    int phase = (int)(app_time() * 8) % 8;
+    for (int i = 0; i < 8; i++) {
+        int size = (i - phase + 8) % 8 < 3 ? 3 : 1;
+        pd->graphics->fillEllipse(x + dx[i] * radius / 10 - size / 2,
+            y + dy[i] * radius / 10 - size / 2, size, size, 0, 360, color);
+    }
+}
+static void draw_actions(void) {
+    static const char *labels[] = {"Discard draft", "Reconnect", "Receive setup", "Tailscale sign-in", "Change tailnet", "Back"};
+    pd->graphics->clear(kColorWhite);
+    pd->graphics->fillRect(0, 0, 400, 20, kColorBlack);
+    pd->graphics->setDrawMode(kDrawModeFillWhite);
+    line(body_fonts[0], "Actions", MARGIN, 2, 384);
+    pd->graphics->setDrawMode(kDrawModeCopy);
+    for (int i = 0; i < 6; i++) {
+        int y = CONTENT_TOP + i * 30;
+        if (i == action_selection) {
+            pd->graphics->fillRect(4, y - 1, 392, 27, kColorBlack);
+            pd->graphics->setDrawMode(kDrawModeFillWhite);
+        }
+        line(body_fonts[0], labels[i], MARGIN, y + 5, 384);
+        pd->graphics->setDrawMode(kDrawModeCopy);
+    }
+    footer("A Select  B Back  Crank Choose", "");
+}
+static void bubble(const char *value, size_t length, int x, int y, int width, int height, bool user, bool clipped) {
     pd->graphics->fillRoundRect(x, y, width, height, 5, user ? kColorBlack : kColorWhite);
     if (!user) pd->graphics->drawRoundRect(x, y, width, height, 5, 1, kColorBlack);
     pd->graphics->setDrawMode(user ? kDrawModeFillWhite : kDrawModeCopy);
     pd->graphics->setFont(font);
-    text(value, x + 8, y + 6, width - 16, height - 12);
+    pd->graphics->drawTextInRect(value, length, kUTF8Encoding, x + 8, y + 6, width - 16, height - 12, kWrapWord, kAlignTextLeft);
     if (clipped) {
         pd->graphics->setFont(small_font);
         text("Message exceeds the device limit.\nOpen Evener for the complete text.", x + 8, y + height - 32, width - 16, 26);
@@ -284,29 +404,36 @@ static void bubble(const char *value, int x, int y, int width, int height, bool 
     pd->graphics->setDrawMode(kDrawModeCopy);
 }
 static void measure_chat(void) {
-    if (measured_revision == chat_revision) return;
-    char anchor[192] = ""; int anchor_offset = 0;
+    if (measured_revision == chat_revision && measured_font == font) return;
+    char anchor[192] = ""; int anchor_offset = 0, anchor_height = 0;
     if (!follow && measured_revision >= 0) {
         for (int i = 0; i < measured_count; i++) if (row_y[i] + row_height[i] > scroll) {
             // The UI retains the same text position when older rows are prepended.
-            memcpy(anchor, measured_keys[i], sizeof(anchor)); anchor_offset = scroll - row_y[i]; break;
+            memcpy(anchor, measured_keys[i], sizeof(anchor)); anchor_offset = scroll - row_y[i]; anchor_height = row_height[i]; break;
         }
     }
     content_height = 0;
     for (int i = 0; i < chat_count; i++) {
         row_y[i] = content_height;
         memcpy(measured_keys[i], chat[i].key, sizeof(measured_keys[i]));
-        const char *value = chat[i].text ? chat[i].text : "";
-        int width = pd->graphics->getTextWidth(font, value, strlen(value), kUTF8Encoding, 0) + 16;
+        const char *value = body_text(chat[i].text ? chat[i].text : "");
+        row_text_length[i] = display_length(value);
+        int width = pd->graphics->getTextWidth(font, value, row_text_length[i], kUTF8Encoding, 0) + 16;
         row_width[i] = width > BUBBLE_WIDTH || chat[i].clipped ? BUBBLE_WIDTH : width < 64 ? 64 : width;
-        row_height[i] = 12 + pd->graphics->getTextHeightForMaxWidth(font, value, strlen(value), row_width[i] - 16, kUTF8Encoding, kWrapWord, 0, 0) + (chat[i].clipped ? 26 : 0);
+        row_height[i] = 12 + pd->graphics->getTextHeightForMaxWidth(font, value, row_text_length[i], row_width[i] - 16, kUTF8Encoding, kWrapWord, 0, 0) + (chat[i].clipped ? 26 : 0);
         content_height += row_height[i] + 8;
-        if (anchor[0] && !strcmp(anchor, chat[i].key)) scroll = row_y[i] + anchor_offset;
+        if (anchor[0] && !strcmp(anchor, chat[i].key)) {
+            if (measured_font != font && anchor_height > 0 && anchor_offset > 0)
+                anchor_offset = (int)((int64_t)anchor_offset * row_height[i] / anchor_height);
+            scroll = row_y[i] + anchor_offset;
+        }
     }
     measured_revision = chat_revision;
+    measured_font = font;
     measured_count = chat_count;
 }
 static void draw(void) {
+    if (actions_open) { draw_actions(); return; }
     pd->graphics->clear(kColorWhite);
     pd->graphics->setFont(font);
     const char *heading = screen == SCREEN_SESSIONS ?
@@ -314,12 +441,21 @@ static void draw(void) {
         screen == SCREEN_COMPOSER ?
             (voice_state == VOICE_RECORDING ? "Recording" : voice_state == VOICE_FINISHING ? "Transcribing audio" :
                 voice_state == VOICE_ERROR ? "Dictation paused" : draft.state == DRAFT_EMPTY ? "Dictate message" : "Review message") : selected_title;
+    bool loading = !error[0] && (!permissions_ready || hub_loading || !hub_ready);
+    bool empty = screen == SCREEN_SESSIONS ? !navigation_count : screen == SCREEN_TRANSCRIPT ? !chat_count : false;
     pd->graphics->fillRect(0, 0, 400, 20, kColorBlack);
     pd->graphics->setDrawMode(kDrawModeFillWhite);
-    line(font, heading, MARGIN, 2, 384);
+    line(body_fonts[0], heading, MARGIN, 2, loading && !empty ? 362 : 384);
+    if (loading && !empty) spinner(383, 9, 6, kColorWhite);
     pd->graphics->setDrawMode(kDrawModeCopy);
-    if (error[0] || !permissions_ready) {
-        text(error[0] ? error : "Preparing microphone and network access...", MARGIN, CONTENT_TOP, 384, CONTENT_HEIGHT);
+    pd->graphics->setFont(font);
+    if (error[0]) { text(error, MARGIN, CONTENT_TOP, 384, CONTENT_HEIGHT); return; }
+    if (loading && (empty || !permissions_ready)) {
+        spinner(200, 82, 14, kColorBlack);
+        const char *phase = !permissions_ready ? "Preparing microphone and network access..." :
+            hub_status[0] ? hub_status : "Connecting to Evener...";
+        pd->graphics->drawTextInRect(phase, strlen(phase), kUTF8Encoding, MARGIN, 115, 384, 100, kWrapWord, kAlignTextCenter);
+        footer(screen == SCREEN_TRANSCRIPT ? "B Sessions" : "A Open  B Back", "");
         return;
     }
     if (screen == SCREEN_SESSIONS) {
@@ -330,11 +466,11 @@ static void draw(void) {
             int y = CONTENT_TOP + (i - start) * 30;
             bool picked = i == selection;
             if (picked) { pd->graphics->fillRect(4, y - 1, 392, 29, kColorBlack); pd->graphics->setDrawMode(kDrawModeFillWhite); }
-            line(font, i < navigation_count ? navigation[i].title : "More sessions...", MARGIN, y, 384);
+            line(body_fonts[0], i < navigation_count ? navigation[i].title : "More sessions...", MARGIN, y, 384);
             line(small_font, i < navigation_count ? navigation[i].state : "Next page", MARGIN, y + 16, 384);
             pd->graphics->setFont(font); pd->graphics->setDrawMode(kDrawModeCopy);
         }
-        if (!total) text(hub_loading ? "Loading..." : "No sessions in this view.", MARGIN, 40, 384, 80);
+        if (!total) text("No sessions in this view.", MARGIN, 40, 384, 80);
         const char *tabs[] = {"Current", "Recent", "Archived"};
         char hint[128];
         snprintf(hint, sizeof(hint), "A Open  B Back  L/R %s", browse_kind == BROWSE_PROJECT ? tabs[browse_tier] : "Live / Projects");
@@ -346,24 +482,27 @@ static void draw(void) {
         if (scroll < 0) scroll = 0;
         if (scroll > bottom) scroll = bottom;
         pd->graphics->setClipRect(MARGIN, CONTENT_TOP, 384, CONTENT_HEIGHT);
-        if (!chat_count) text(hub_loading ? "Loading conversation..." :
-            draft.state == DRAFT_EMPTY && saved_audio ? "No chat messages yet.\n\nPress A to transcribe your saved audio." :
+        if (!chat_count) text(draft.state == DRAFT_EMPTY && saved_audio ? "No chat messages yet.\n\nPress A to transcribe your saved audio." :
             draft.state != DRAFT_EMPTY ? "No chat messages yet.\n\nPress A to review your saved draft." :
             "No chat messages yet.\n\nHold A to dictate a message.", MARGIN, CONTENT_TOP, 378, CONTENT_HEIGHT);
         for (int i = 0; i < chat_count; i++) {
             int y = CONTENT_TOP + row_y[i] - scroll;
             if (y + row_height[i] < CONTENT_TOP || y >= CONTENT_TOP + CONTENT_HEIGHT) continue;
-            const char *value = chat[i].text ? chat[i].text : "";
+            const char *value = body_text(chat[i].text ? chat[i].text : "");
             int x = chat[i].user ? 392 - row_width[i] : MARGIN;
-            bubble(value, x, y, row_width[i], row_height[i], chat[i].user, chat[i].clipped);
+            bubble(value, row_text_length[i], x, y, row_width[i], row_height[i], chat[i].user, chat[i].clipped);
         }
         footer(draft.state == DRAFT_EMPTY ? (saved_audio ? "A Transcribe saved audio  B Sessions" : "Hold A Dictate  B Sessions  Crank Scroll") :
-            "A Review draft  B Sessions", hub_hydrated ? session_status : hub_status);
+            "A Review draft  B Sessions", loading || !hub_hydrated ? hub_status : session_status);
     } else {
         const char *body = voice_state == VOICE_ERROR ? voice_status : recording_started ? voice_text : draft.text;
         if (!body[0]) body = voice_state == VOICE_RECORDING ? "Listening now...\n\nRelease A to review before sending." :
-            voice_state == VOICE_FINISHING ? "Audio captured.\n\nWaiting for transcription.\n\nKeep Evener open while audio saves.\nMenu > Discard draft removes it." : "Hold A and speak.\nRelease A to review before sending.";
+            voice_state == VOICE_FINISHING ? "Audio captured.\n\nWaiting for transcription.\n\nKeep Evener open while audio saves.\nMenu > Actions > Discard draft removes it." : "Hold A and speak.\nRelease A to review before sending.";
+        body = body_text(body);
         int height = pd->graphics->getTextHeightForMaxWidth(font, body, strlen(body), 384, kUTF8Encoding, kWrapWord, 0, 0);
+        if (!follow && composer_font != font && composer_height > 0)
+            scroll = (int)((int64_t)scroll * height / composer_height);
+        composer_font = font; composer_height = height;
         int bottom = height > CONTENT_HEIGHT ? height - CONTENT_HEIGHT : 0;
         if (follow) scroll = bottom;
         if (scroll < 0) scroll = 0;
@@ -371,12 +510,12 @@ static void draw(void) {
         pd->graphics->setClipRect(MARGIN, CONTENT_TOP, 384, CONTENT_HEIGHT);
         text(body, MARGIN, CONTENT_TOP - scroll, 384, height + 16);
         const char *hint = voice_state == VOICE_RECORDING ? "Listening... Release A to review" :
-            voice_state == VOICE_FINISHING ? "Transcribing...  B Keep  Menu Discard" :
+            voice_state == VOICE_FINISHING ? "Transcribing...  B Keep  Menu Actions" :
             recording_started && voice_state == VOICE_REVIEW && !final_saved ? "Saving review..." :
             hub_send_pending() ? "B Conversation" :
-            draft.state == DRAFT_READY ? "A Send  B Keep draft  Menu Discard" :
+            draft.state == DRAFT_READY ? "A Send  B Keep draft  Menu Actions" :
             draft.state == DRAFT_UNCERTAIN || draft.state == DRAFT_SENDING ? "Checking delivery...  B Conversation" :
-            draft.state == DRAFT_PARTIAL ? "Partial saved  Menu Discard to retry" : "Hold A Dictate  B Conversation";
+            draft.state == DRAFT_PARTIAL ? "Partial saved  Menu Actions to retry" : "Hold A Dictate  B Conversation";
         footer(hint, recording_started || voice_state == VOICE_ERROR ? voice_status : hub_status);
     }
 }
@@ -415,11 +554,53 @@ static int render(void (*paint)(void)) {
     if (first >= 0) pd->graphics->markUpdatedRows(first, LCD_ROWS - 1);
     return changed;
 }
+static int scroll_input(PDButtons held, PDButtons pressed, float crank) {
+    int history = 0;
+    PDButtons direction = pressed & (kButtonUp | kButtonDown);
+    if (direction) repeat_at = app_time() + .35f;
+    else if ((held & (kButtonUp | kButtonDown)) && app_time() > repeat_at) { direction = held & (kButtonUp | kButtonDown); repeat_at = app_time() + .08f; }
+    if (crank != 0 || direction) {
+        crank_remainder += crank;
+        if (actions_open || screen == SCREEN_SESSIONS) {
+            int move = (int)(crank_remainder / 18); crank_remainder -= move * 18;
+            int *picked = actions_open ? &action_selection : &selection;
+            *picked += move + ((direction & kButtonDown) ? 1 : (direction & kButtonUp) ? -1 : 0);
+            if (*picked < 0) *picked = 0;
+            if (actions_open && *picked > 5) *picked = 5;
+        } else if (screen == SCREEN_TRANSCRIPT || screen == SCREEN_COMPOSER) {
+            follow = false;
+            int move = (int)crank_remainder; crank_remainder -= move;
+            scroll += move + ((direction & kButtonDown) ? 30 : (direction & kButtonUp) ? -30 : 0);
+            if (screen == SCREEN_TRANSCRIPT && scroll <= 0) history = -1;
+            if (screen == SCREEN_TRANSCRIPT && scroll >= content_height - CONTENT_HEIGHT && (move > 0 || (direction & kButtonDown))) {
+                if (hub_has_newer) history = 1;
+                else follow = true;
+            }
+        }
+    }
+    return history;
+}
 static int update(void *context) {
     (void)context;
     if (network_restarting) return 0;
     PDButtons held, pressed, released;
     pd->system->getButtonState(&held, &pressed, &released);
+    float crank = pd->system->getCrankChange();
+    int history = 0;
+    if (actions_open) {
+        scroll_input(held, pressed, crank);
+        if (pressed & (kButtonA | kButtonB)) {
+            actions_open = false; crank_remainder = 0;
+            if (pressed & kButtonA) {
+                if (action_selection == 0) discard(NULL);
+                else if (action_selection < 5) network_action(action_selection - 1);
+            }
+        }
+        held = pressed = released = 0; crank = 0;
+    } else if (permissions_ready && !pairing_active() && screen != SCREEN_AUTH) history = scroll_input(held, pressed, crank);
+    else crank_remainder = 0;
+    hub_set_reading(screen == SCREEN_TRANSCRIPT);
+    hub_set_prefetch_paused(actions_open || pairing_active() || screen == SCREEN_AUTH || screen == SCREEN_COMPOSER);
     if (pairing_active()) {
         net_tick();
         enum PairingResult result = pairing_update(pressed);
@@ -496,9 +677,12 @@ static int update(void *context) {
                 anchor = measured_keys[i]; break;
             }
         hub_set_reading_anchor(anchor);
+        if (history < 0) hub_older();
+        else if (history > 0) hub_newer();
         enum DraftState before = draft.state;
         if (config.use_tailnet) {
             tailnet_device_set_voice_active(voice_state == VOICE_RECORDING || voice_state == VOICE_FINISHING);
+            tailnet_device_set_hub_active(hub_foreground_busy());
             tailnet_device_update();
         }
         hub_update();
@@ -558,24 +742,6 @@ static int update(void *context) {
             selection = 0;
         }
     }
-    float crank = pd->system->getCrankChange();
-    PDButtons direction = pressed & (kButtonUp | kButtonDown);
-    if (direction) repeat_at = app_time() + .35f;
-    else if ((held & (kButtonUp | kButtonDown)) && app_time() > repeat_at) { direction = held & (kButtonUp | kButtonDown); repeat_at = app_time() + .08f; }
-    if (crank != 0 || direction) {
-        crank_remainder += crank;
-        if (screen == SCREEN_SESSIONS) {
-            int move = (int)(crank_remainder / 18); crank_remainder -= move * 18;
-            selection += move + ((direction & kButtonDown) ? 1 : (direction & kButtonUp) ? -1 : 0);
-            if (selection < 0) selection = 0;
-        } else {
-            follow = false;
-            int move = (int)crank_remainder; crank_remainder -= move;
-            scroll += move + ((direction & kButtonDown) ? 30 : (direction & kButtonUp) ? -30 : 0);
-            if (screen == SCREEN_TRANSCRIPT && scroll <= 0) hub_older();
-            if (screen == SCREEN_TRANSCRIPT && scroll >= content_height - CONTENT_HEIGHT && (move > 0 || (direction & kButtonDown))) follow = true;
-        }
-    }
     if (recover_network()) return 0;
     return render(draw);
 }
@@ -592,17 +758,11 @@ int eventHandler(PlaydateAPI *playdate, PDSystemEvent event, uint32_t arg) {
         app_log("Application lifecycle event %u at %.2f seconds", (unsigned)event, (double)app_time());
     if (event == kEventInit) {
         pd = playdate;
-        const char *reason = NULL;
-        font = pd->graphics->loadFont("/System/Fonts/Roobert-10-Bold.pft", &reason);
-        small_font = pd->graphics->loadFont("fonts/Nontendo-Light", &reason);
+        initialize_reader();
         canvas = pd->graphics->newBitmap(LCD_COLUMNS, LCD_ROWS, kColorWhite);
         if (!canvas) app_log("Could not allocate the offscreen display buffer");
         pd->display->setRefreshRate(30);
         pd->system->setUpdateCallback(update, NULL);
-        pd->system->addMenuItem("Discard draft", discard, NULL);
-        pd->system->addMenuItem("Latest messages", latest, NULL);
-        static const char *network_options[] = {"Reconnect", "Receive setup", "Tailscale sign-in", "Change tailnet"};
-        network_menu = pd->system->addOptionsMenuItem("Network", network_options, 4, network_action, NULL);
         if (!read_configuration()) snprintf(error, sizeof(error), "Device configuration is missing or could not be read.");
         else {
             setup_requested = !settings_ready();
@@ -619,6 +779,7 @@ int eventHandler(PlaydateAPI *playdate, PDSystemEvent event, uint32_t arg) {
         hub_close();
         if (config.use_tailnet) tailnet_device_stop();
     } else if (event == kEventResume || event == kEventUnlock) {
+        pd->system->getCrankChange(); crank_remainder = 0;
         if (pairing_active()) { pairing_resume(); return 0; }
         if (!permissions_ready) return 0;
         if (screen == SCREEN_COMPOSER) recording_started = voice_recover() && voice_state != VOICE_ERROR;
