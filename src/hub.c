@@ -26,7 +26,7 @@ static unsigned serial, request_id, browse_generation, requested_browse;
 static char request_ref[REF_CAPACITY], request_mutation[65], older_cursor[2048];
 static char incarnation[128], boot_generation[128], instance[128];
 static int epoch, requested_offset, retry_delay = 1;
-static float request_time, reconnect_at, browse_at, cache_at;
+static float request_time, reconnect_at, browse_at, cache_at, cleanup_at;
 static int saved_revision = -1;
 static bool initialized, want_browse, want_read, want_older, want_send, replay_allowed, send_prepared;
 static bool can_send, can_queue, resume_required, resume_foldable, suspended, rebase_older, replace_chat;
@@ -69,6 +69,9 @@ static void remove_chat(int index) {
 static void clear_chat(void) { while (chat_count) remove_chat(chat_count - 1); }
 static void free_rows(ChatMessage *rows, int count) {
     for (int i = 0; i < count; i++) { free(rows[i].text); rows[i].text = NULL; }
+}
+static void clear_rows(ChatMessage *rows, int *count) {
+    free_rows(rows, *count); *count = 0;
 }
 static void clear_overlays(const char *round, const char *stream) {
     for (int i = chat_count - 1; i >= 0; i--)
@@ -169,7 +172,7 @@ static void turns(const Json *j, int array, bool backfill) {
         chat_array(j, json_get(j, i, "items"), backfill);
 }
 static bool load_page(const HistoryCache *history, int page) {
-    free_rows(page_rows, page_count); page_count = 0;
+    clear_rows(page_rows, &page_count);
     return cache_load_history_page(history, page, page_rows, &page_count);
 }
 static bool merge_chat(const ChatMessage *row, bool older, bool existing_only) {
@@ -223,7 +226,7 @@ static void history_edges(void) {
         if (!hub_has_newer && cache_history_edge(&view_archive, last_page, true, &boundary))
             hub_has_newer = compare_chat(&chat[last], &boundary) < 0;
     }
-    free_rows(page_rows, page_count); page_count = 0;
+    clear_rows(page_rows, &page_count);
 }
 static bool checkpoint_history(void) {
     if (!archive_valid) return true;
@@ -272,7 +275,7 @@ static bool append_history(const ChatMessage *rows, int count) {
             if (page_count && compare_chat(&rows[i], &page_rows[page_count - 1]) <= 0) { ok = false; break; }
             if (page_count == HISTORY_PAGE_ITEMS) {
                 if (dirty && !cache_save_history_page(&next, loaded, page_rows, page_count)) { ok = false; break; }
-                free_rows(page_rows, page_count); page_count = 0;
+                clear_rows(page_rows, &page_count);
                 loaded = ++next.newest; dirty = false;
             }
             index = page_count;
@@ -283,29 +286,28 @@ static bool append_history(const ChatMessage *rows, int count) {
         dirty = true;
     }
     if (ok && dirty) ok = cache_save_history_page(&next, loaded, page_rows, page_count);
-    free_rows(page_rows, page_count); page_count = 0;
+    clear_rows(page_rows, &page_count);
     if (ok) ok = cache_save_history(&next);
     if (ok) archive = next;
     return ok;
 }
-static bool refresh_history(const char *snapshot, const char *cursor) {
-    bool continuous = !reset_history && archive_valid && same(archive.incarnation, snapshot) && load_page(&archive, archive.newest);
-    if (continuous && page_count) {
-        continuous = false;
+static bool refresh_history(const char *snapshot, const char *cursor, bool *continuous) {
+    *continuous = !reset_history && archive_valid && same(archive.incarnation, snapshot) && load_page(&archive, archive.newest);
+    if (*continuous && page_count) {
+        *continuous = false;
         for (int i = 0; i < incoming_count; i++)
-            if (same(incoming_rows[i].key, page_rows[page_count - 1].key)) continuous = true;
+            if (same(incoming_rows[i].key, page_rows[page_count - 1].key)) *continuous = true;
     }
-    free_rows(page_rows, page_count); page_count = 0;
-    if (!continuous) {
+    clear_rows(page_rows, &page_count);
+    if (!*continuous) {
         bool saved = begin_history(snapshot, cursor);
         if (saved) reset_history = false;
         return saved;
     }
     if (!append_history(incoming_rows, incoming_count)) return false;
-    if (!archive.complete) {
-        snprintf(archive.cursor, sizeof(archive.cursor), "%s", cursor);
-        rebase_older = true;
-    }
+    if (archive.complete) return true;
+    snprintf(archive.cursor, sizeof(archive.cursor), "%s", cursor);
+    rebase_older = true;
     return cache_save_history(&archive);
 }
 static bool backfill_history(const char *cursor) {
@@ -313,7 +315,7 @@ static bool backfill_history(const char *cursor) {
     next = archive;
     if (incoming_count) {
         bool empty = next.oldest == next.newest && load_page(&next, next.oldest) && !page_count;
-        free_rows(page_rows, page_count); page_count = 0;
+        clear_rows(page_rows, &page_count);
         if (!empty) next.oldest--;
         if (!cache_save_history_page(&next, next.oldest, incoming_rows, incoming_count)) return false;
     }
@@ -329,7 +331,7 @@ static void repair_history(int page, bool older) {
         repair_entry = boundary.entry; repair_item = boundary.item; repair_sub = boundary.sub;
         want_older = true;
     } else { reset_history = true; want_read = true; }
-    free_rows(page_rows, page_count); page_count = 0;
+    clear_rows(page_rows, &page_count);
 }
 static bool move_history(bool older) {
     int last = last_recorded();
@@ -342,13 +344,13 @@ static bool move_history(bool older) {
     }
     if (same_position(&chat[edge], &boundary)) page += older ? -1 : 1;
     if (page < view_archive.oldest || page > view_archive.newest) {
-        free_rows(page_rows, page_count); page_count = 0; return false;
+        clear_rows(page_rows, &page_count); return false;
     }
     if (!load_page(&view_archive, page)) { repair_history(page, older); return false; }
     // The page overlaps the retained window; only scrolling may evict its far edge.
     clear_overlays(NULL, NULL);
     for (int i = 0; i < page_count; i++) merge_chat(&page_rows[i], older, false);
-    free_rows(page_rows, page_count); page_count = 0;
+    clear_rows(page_rows, &page_count);
     history_edges();
     return true;
 }
@@ -409,7 +411,7 @@ static void read_result(const Json *j, int result, bool backfill) {
         (json_get(j, result, "epoch") >= 0 && json_int(j, json_get(j, result, "epoch")) != epoch))) {
         repair_page = INT32_MIN; want_read = true; return;
     }
-    free_rows(incoming_rows, incoming_count); incoming_count = 0; incoming_failed = false;
+    clear_rows(incoming_rows, &incoming_count); incoming_failed = false;
     collecting = true;
     if (backfill) turns(j, json_get(j, result, "data"), true);
     else {
@@ -418,7 +420,7 @@ static void read_result(const Json *j, int result, bool backfill) {
     }
     collecting = false;
     if (incoming_failed) {
-        free_rows(incoming_rows, incoming_count); incoming_count = 0;
+        clear_rows(incoming_rows, &incoming_count);
         archive_failed = true; status("Could not load this history page"); return;
     }
     static char cursor[2048];
@@ -434,7 +436,13 @@ static void read_result(const Json *j, int result, bool backfill) {
         epoch = json_int(j, json_get(j, result, "epoch"));
         int thread = json_get(j, result, "thread");
         thread_metadata(j, thread);
-        archive_failed = !cursor_complete || !incoming[0] || !refresh_history(incoming, cursor);
+        bool continuous = false;
+        archive_failed = !cursor_complete || !incoming[0] || !refresh_history(incoming, cursor, &continuous);
+        if (!continuous && !replace) {
+            // Keep a pinned window continuous until the archive fills its gap.
+            if (tail && !reading_anchor[0]) { clear_chat(); replace = true; }
+            else tail = false;
+        }
         if (archive_failed) {
             app_log("Could not save fresh history pages");
             if (replace || !same(archive.incarnation, incoming)) archive_valid = view_valid = false;
@@ -468,13 +476,12 @@ static void read_result(const Json *j, int result, bool backfill) {
                 }
             } else {
                 snprintf(older_cursor, sizeof(older_cursor), "%s", archive.cursor);
-                history_edges();
-                if (show) move_history(true);
+                if (show) { history_edges(); move_history(true); }
             }
         }
         if (show) want_older = false;
     }
-    free_rows(incoming_rows, incoming_count); incoming_count = 0;
+    clear_rows(incoming_rows, &incoming_count);
     history_edges();
     if (draft.state == DRAFT_UNCERTAIN && replay_allowed) want_send = true;
     connected_status();
@@ -517,16 +524,21 @@ static void notification(const Json *j, int method, int params) {
             json_int(j, json_get(j, params, "epoch")) != epoch) { want_read = true; return; }
         bool tail = !hub_has_newer;
         int array = json_get(j, params, "items");
-        for (int i = json_first(j, array); i >= 0 && i < json_next(j, array); i = json_next(j, i)) {
+        int i = json_first(j, array), end = json_next(j, array);
+        while (i >= 0 && i < end) {
             incoming_count = 0; incoming_failed = false; collecting = true;
-            chat_item(j, i, -1, false); collecting = false;
-            if (incoming_count && !incoming_failed) {
+            do {
+                chat_item(j, i, -1, false); i = json_next(j, i);
+            } while (i >= 0 && i < end && incoming_count < HISTORY_PAGE_ITEMS && !incoming_failed);
+            collecting = false;
+            if (incoming_failed) { archive_failed = reset_history = true; want_read = true; }
+            else if (incoming_count) {
                 if (archive_valid && !archive_failed && !append_history(incoming_rows, incoming_count)) {
                     archive_failed = reset_history = true; want_read = true;
                 }
-                merge_chat(&incoming_rows[0], false, !tail);
+                for (int item = 0; item < incoming_count; item++) merge_chat(&incoming_rows[item], false, !tail);
             }
-            free_rows(incoming_rows, incoming_count); incoming_count = 0;
+            clear_rows(incoming_rows, &incoming_count);
         }
         history_edges();
     } else if (json_is(j, method, "overlay/upserted")) {
@@ -631,9 +643,9 @@ void hub_reset_profile(void) {
     archive_valid = view_valid = archive_failed = reading = prefetch_paused = background_request = reset_history = false;
     repair_page = INT32_MIN;
     memset(&archive, 0, sizeof(archive)); memset(&view_archive, 0, sizeof(view_archive));
-    free_rows(page_rows, page_count); page_count = 0;
-    free_rows(incoming_rows, incoming_count); incoming_count = 0;
-    pending = REQUEST_NONE; saved_revision = -1; retry_delay = 1; reconnect_at = browse_at = cache_at = 0;
+    clear_rows(page_rows, &page_count);
+    clear_rows(incoming_rows, &incoming_count);
+    pending = REQUEST_NONE; saved_revision = -1; retry_delay = 1; reconnect_at = browse_at = cache_at = cleanup_at = 0;
 }
 void hub_browse(enum BrowseKind kind, const char *project, const char *title, int tier, int offset) {
     reading = false;
@@ -653,7 +665,7 @@ bool hub_select(const NavigationRow *row) {
     clear_chat(); incarnation[0] = older_cursor[0] = session_status[0] = reading_anchor[0] = 0;
     hub_hydrated = hub_has_older = hub_has_newer = replay_allowed = send_prepared = false;
     archive_valid = view_valid = archive_failed = reset_history = false; reading = true;
-    repair_page = INT32_MIN;
+    repair_page = INT32_MIN; cleanup_at = 0;
     memset(&archive, 0, sizeof(archive)); memset(&view_archive, 0, sizeof(view_archive));
     replace_chat = false;
     if (cache_load_chat()) { replace_chat = true; status("Saved conversation; updating..."); }
@@ -671,6 +683,7 @@ bool hub_select(const NavigationRow *row) {
     }
     want_read = true; want_older = want_send = false;
     yield_request();
+    hub_loading = true; status(chat_count ? "Saved conversation; updating..." : "Loading conversation...");
     return true;
 }
 void hub_set_reading_anchor(const char *key) { snprintf(reading_anchor, sizeof(reading_anchor), "%s", key); }
@@ -731,7 +744,7 @@ void hub_latest(void) {
             for (int i = 0; i < page_count; i++) merge_chat(&page_rows[i], true, false);
         }
         while (chat_count > HISTORY_PAGE_ITEMS) remove_chat(0);
-        free_rows(page_rows, page_count); page_count = 0;
+        clear_rows(page_rows, &page_count);
         view_archive = archive; view_valid = true; history_edges();
     }
     replace_chat = true; want_read = true; want_older = false;
@@ -791,8 +804,10 @@ void hub_update(void) {
     }
     if (socket.state == WS_CLOSED && app_time() >= reconnect_at) hub_connect();
     if (want_send || want_read) yield_request();
-    if (archive_valid && !prefetch_paused && !hub_foreground_busy() && voice_state == VOICE_OFF)
+    if (archive_valid && !prefetch_paused && !hub_foreground_busy() && voice_state == VOICE_OFF && app_time() >= cleanup_at) {
+        cleanup_at = app_time() + 0.5f;
         cache_reclaim_history(&archive, view_valid ? view_archive.generation : 0);
+    }
     if (!ws_writable(&socket) || pending) return;
     if (!initialized) {
         request(REQUEST_INIT, "initialize", "{\"protocolVersion\":\"evener-appwire-v7\",\"clientInfo\":{\"name\":\"playdate\",\"version\":\"0.1.0\"},\"capabilities\":{\"experimentalApi\":false}}");
@@ -814,7 +829,7 @@ void hub_update(void) {
     } else if (want_read) {
         snprintf(params, sizeof(params), "{\"ref\":%s,\"includeTurns\":true,\"subscribe\":true,\"replaceSubscription\":true,\"itemLimit\":%d,%s}", ref, HISTORY_PAGE_ITEMS, history_content);
         if (request(REQUEST_READ, "thread/read", params)) want_read = false;
-    } else if ((want_older && hub_has_older) || (reading && !prefetch_paused && hub_hydrated &&
+    } else if ((want_older && (hub_has_older || repair_page != INT32_MIN)) || (reading && !prefetch_paused && hub_hydrated &&
         archive_valid && !archive_failed && !archive.complete && voice_state != VOICE_RECORDING &&
         voice_state != VOICE_FINISHING && voice_state != VOICE_CONNECTING && voice_state != VOICE_CONFIGURING)) {
         static char cursor[12291];
@@ -830,7 +845,7 @@ void hub_update(void) {
         } else if (rebase_older && !archive_valid && chat_count && !chat[0].overlay) {
             boundary = chat[0]; boundary.text = NULL; before = true;
         }
-        free_rows(page_rows, page_count); page_count = 0;
+        clear_rows(page_rows, &page_count);
         if (before)
             snprintf(params, sizeof(params), "{\"ref\":%s,\"cursor\":%s,\"before\":{\"entry\":%d,\"item\":%d,\"sub\":%d},\"itemLimit\":%d,%s}", ref, cursor, boundary.entry, boundary.item, boundary.sub, HISTORY_PAGE_ITEMS, history_content);
         else snprintf(params, sizeof(params), "{\"ref\":%s,\"cursor\":%s,\"itemLimit\":%d,%s}", ref, cursor, HISTORY_PAGE_ITEMS, history_content);

@@ -117,6 +117,7 @@ static void request_priorities(void) {
     hub_update(); CHECK(!strcmp(method, "evener/navigation/read"));
     unsigned obsolete_navigation = request_id;
     NavigationRow row = {.ref = "priority-session"}; CHECK(hub_select(&row));
+    CHECK(hub_loading && !hub_hydrated);
     CHECK(hub_foreground_busy()); hub_update(); CHECK(!strcmp(method, "thread/read"));
     unsigned selected_read = request_id;
     reply_to(obsolete_navigation, "{\"data\":{}}");
@@ -137,8 +138,9 @@ static void request_priorities(void) {
 }
 static SDFile *(*open_file)(const char *, FileOptions);
 static char written_path[128];
+static unsigned write_opens;
 static SDFile *remember_write(const char *path, FileOptions mode) {
-    if (mode & kFileWrite) snprintf(written_path, sizeof(written_path), "%s", path);
+    if (mode & kFileWrite) { write_opens++; snprintf(written_path, sizeof(written_path), "%s", path); }
     return open_file(path, mode);
 }
 static void save_page_path(const HistoryCache *history, int page_number, const ChatMessage *rows, int count, char *path, size_t capacity) {
@@ -201,22 +203,125 @@ static void cache_failures(void) {
     page("failure-snapshot", 1000, 10, false); CHECK(chat_count == 20 && chat[0].entry == 990);
     hub_close(); hub_reset_profile();
 }
+static void newer_page_repair(void) {
+    NavigationRow row = {.ref = "newer-repair-session"}; CHECK(hub_select(&row)); read_latest("newer-repair-snapshot", 10);
+    for (int first = 990; first >= 900; first -= 10) { hub_update(); page("newer-repair-snapshot", first, 10, true); }
+    for (int i = 0; i < 10; i++) { hub_set_reading_anchor(chat[0].key); hub_older(); }
+    CHECK(chat[0].entry == 900 && !hub_has_older && hub_has_newer);
+    HistoryCache history; CHECK(cache_load_history(&history) && history.complete);
+    int damaged = cache_history_position(&history, &chat[chat_count - 1]); CHECK(damaged != INT32_MIN);
+    corrupt_page(&history, damaged);
+    int revision = chat_revision;
+    unsigned previous_request = request_id;
+    hub_set_reading_anchor(chat[chat_count - 1].key); hub_newer();
+    CHECK(chat_revision == revision && chat[0].entry == 900);
+    hub_update();
+    CHECK(request_id != previous_request && !strcmp(method, "thread/turns/list") && before_entry == 970);
+    CHECK(hub_loading && hub_foreground_busy());
+    page("newer-repair-snapshot", 960, 10, true);
+    CHECK(chat_count == CHAT_CAPACITY && chat[chat_count - 1].entry == 969 && !hub_foreground_busy());
+    CHECK(cache_load_history(&history) && history.complete);
+    ChatMessage rows[HISTORY_PAGE_ITEMS] = {0}; int count;
+    CHECK(cache_load_history_page(&history, damaged, rows, &count) && count == 10);
+    for (int i = 0; i < count; i++) free(rows[i].text);
+    for (int i = 0; hub_has_newer && i < 20; i++) { hub_set_reading_anchor(chat[chat_count - 1].key); hub_newer(); }
+    CHECK(!hub_has_newer && chat[chat_count - 1].entry == 1009);
+    hub_close(); hub_reset_profile();
+}
+static void refresh_gap(bool older, bool pinned) {
+    NavigationRow row = {0}; snprintf(row.ref, sizeof(row.ref), "gap-session-%d-%d", older, pinned);
+    CHECK(hub_select(&row)); read_latest("gap-snapshot", 10);
+    for (int first = 990; first >= 900; first -= 10) { hub_update(); page("gap-snapshot", first, 10, true); }
+    if (older) for (int i = 0; i < 10; i++) { hub_set_reading_anchor(chat[0].key); hub_older(); }
+    else if (pinned) hub_set_reading_anchor(chat[0].key);
+    int revision = chat_revision;
+    connect_hub(); hub_update(); CHECK(!strcmp(method, "thread/read")); page("gap-snapshot", 1030, 10, false);
+    if (older) CHECK(chat_count == CHAT_CAPACITY && chat[0].entry == 900 && chat_revision == revision && hub_has_newer);
+    else if (pinned) CHECK(chat_count == 10 && chat[0].entry == 1000 && chat_revision == revision && hub_has_newer);
+    else CHECK(chat_count == 10 && chat[0].entry == 1030 && chat[9].entry == 1039 && !hub_has_newer);
+    revision = chat_revision;
+    for (int first = 1020; first >= 900; first -= 10) {
+        hub_update(); CHECK(!strcmp(method, "thread/turns/list")); page("gap-snapshot", first, 10, true);
+        CHECK(chat_revision == revision && chat[0].entry == (older ? 900 : pinned ? 1000 : 1030));
+    }
+    if (!older) for (int i = 0; hub_has_older && i < 30; i++) { hub_set_reading_anchor(chat[0].key); hub_older(); }
+    CHECK(chat[0].entry == 900 && !hub_has_older && hub_has_newer);
+    for (int i = 0; hub_has_newer && i < 30; i++) {
+        hub_set_reading_anchor(chat[chat_count - 1].key); hub_newer();
+        for (int j = 1; j < chat_count; j++) CHECK(chat[j].entry == chat[j - 1].entry + 1);
+    }
+    CHECK(!hub_has_newer && chat[chat_count - 1].entry == 1039);
+    hub_close(); hub_reset_profile();
+}
+static void history_update(const char *snapshot, int first, int count, int version) {
+    char notification[12000];
+    int n = snprintf(notification, sizeof(notification), "{\"method\":\"history/updated\",\"params\":{"
+        "\"ref\":\"%s\",\"snapshot\":{\"incarnation\":\"%s\"},\"bootGeneration\":\"\",\"epoch\":0,\"items\":[", selected_ref, snapshot);
+    CHECK(n > 0 && n < sizeof(notification));
+    for (int i = 0; i < count; i++) {
+        int used = snprintf(notification + n, sizeof(notification) - n, "%s{\"type\":\"agentMessage\",\"id\":\"row%d\","
+            "\"position\":{\"entry\":%d},\"version\":%d,\"text\":\"sentinel-live-%d\"}", i ? "," : "", first + i, first + i, version, first + i);
+        CHECK(used > 0 && used < sizeof(notification) - n); n += used;
+    }
+    int used = snprintf(notification + n, sizeof(notification) - n, "]}}"); CHECK(used > 0 && used < sizeof(notification) - n);
+    transport->on_message(transport, notification, n + used);
+}
 static void live_history(void) {
     NavigationRow row = {.ref = "live-history-session"}; CHECK(hub_select(&row)); read_latest("live-snapshot", 10);
     for (int first = 990; first >= 900; first -= 10) { hub_update(); page("live-snapshot", first, 10, true); }
+    hub_recheck(); hub_update(); CHECK(!strcmp(method, "thread/read"));
+    const struct playdate_file *original_files = pd->file;
+    struct playdate_file files = *original_files; open_file = files.open; files.open = remember_write; pd->file = &files;
+    write_opens = 0; page("live-snapshot", 1000, 10, false); CHECK(write_opens <= 4);
+    pd->file = original_files;
     for (int i = 0; i < 10; i++) { hub_set_reading_anchor(chat[0].key); hub_older(); }
     CHECK(chat[0].entry == 900 && hub_has_newer);
     int revision = chat_revision;
-    for (int entry = 1010; entry <= 1030; entry++) {
-        char notification[1024];
-        int length = snprintf(notification, sizeof(notification), "{\"method\":\"history/updated\",\"params\":{"
-            "\"ref\":\"live-history-session\",\"snapshot\":{\"incarnation\":\"live-snapshot\"},\"bootGeneration\":\"\",\"epoch\":0,"
-            "\"items\":[{\"type\":\"agentMessage\",\"id\":\"row%d\",\"position\":{\"entry\":%d},\"text\":\"sentinel-live-%d\"}]}}", entry, entry, entry);
-        CHECK(length > 0 && length < sizeof(notification)); transport->on_message(transport, notification, length);
-        CHECK(chat[0].entry == 900 && chat_revision == revision);
-    }
+    pd->file = &files;
+    write_opens = 0; history_update("live-snapshot", 1010, 10, 0);
+    CHECK(write_opens <= 4 && chat[0].entry == 900 && chat_revision == revision);
+    write_opens = 0; history_update("live-snapshot", 1010, 10, 1);
+    CHECK(write_opens <= 4 && chat[0].entry == 900 && chat_revision == revision);
+    write_opens = 0; history_update("live-snapshot", 1020, 11, 0);
+    CHECK(write_opens <= 8 && chat[0].entry == 900 && chat_revision == revision);
+    pd->file = original_files;
     for (int i = 0; hub_has_newer && i < 30; i++) { hub_set_reading_anchor(chat[chat_count - 1].key); hub_newer(); }
     CHECK(!hub_has_newer && chat[chat_count - 1].entry == 1030 && chat_count <= CHAT_CAPACITY);
+    for (int i = 0; i < chat_count; i++) if (chat[i].entry >= 1010 && chat[i].entry < 1020) CHECK(chat[i].version == 1);
+    hub_set_reading_anchor("");
+    fail_write = true; history_update("live-snapshot", 1031, 10, 0); fail_write = false;
+    CHECK(chat[chat_count - 1].entry == 1040);
+    hub_update(); CHECK(!strcmp(method, "thread/read") && includes_turns);
+    page("live-snapshot", 1031, 10, false); CHECK(chat_count == 10 && chat[9].entry == 1040);
+    hub_close(); hub_reset_profile();
+}
+static int (*unlink_file)(const char *, int);
+static unsigned unlink_attempts;
+static int count_unlink(const char *path, int recursive) {
+    unlink_attempts++;
+    return unlink_file(path, recursive);
+}
+static void cleanup_retries(void) {
+    NavigationRow row = {.ref = "cleanup-retry-session"}; CHECK(hub_select(&row));
+    connect_hub(); hub_update(); page("cleanup-retry-a", 900, 10, false);
+    HistoryCache retired; CHECK(cache_load_history(&retired));
+    connect_hub(); hub_update(); page("cleanup-retry-b", 900, 10, false);
+    char snapshot[128]; CHECK(hub_save_view(snapshot, sizeof(snapshot)));
+    const struct playdate_file *original_files = pd->file;
+    struct playdate_file files = *original_files; unlink_file = files.unlink; files.unlink = count_unlink; pd->file = &files;
+    fixture_time += 2; fail_unlink = true; unlink_attempts = 0;
+    hub_update(); CHECK(unlink_attempts == 1);
+    for (int i = 0; i < 30; i++) hub_update();
+    CHECK(unlink_attempts == 1);
+    fixture_time += 0.1f; hub_update(); CHECK(unlink_attempts == 1);
+    fixture_time += 1; hub_update(); CHECK(unlink_attempts == 2);
+    ChatMessage rows[HISTORY_PAGE_ITEMS] = {0}; int count;
+    CHECK(cache_load_history_page(&retired, retired.oldest, rows, &count));
+    for (int i = 0; i < count; i++) free(rows[i].text);
+    fail_unlink = false; fixture_time += 1; hub_update(); CHECK(unlink_attempts == 3);
+    CHECK(!cache_load_history_page(&retired, retired.oldest, rows, &count));
+    pd->file = original_files;
+    CHECK(chat_count == 10 && chat[0].entry == 900 && !hub_foreground_busy());
     hub_close(); hub_reset_profile();
 }
 static void generation_cleanup(void) {
@@ -303,7 +408,12 @@ int main(int argc, char **argv) {
     hub_close(); hub_reset_profile();
     request_priorities();
     cache_failures();
+    refresh_gap(false, false);
+    refresh_gap(true, false);
+    refresh_gap(false, true);
+    newer_page_repair();
     live_history();
+    cleanup_retries();
     generation_cleanup();
     DIR *dir = opendir("."); CHECK(dir); struct dirent *entry;
     while ((entry = readdir(dir))) if (strcmp(entry->d_name, ".") && strcmp(entry->d_name, "..")) CHECK(!unlink(entry->d_name));
