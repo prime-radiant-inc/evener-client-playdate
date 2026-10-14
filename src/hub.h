@@ -22,7 +22,7 @@ extern char browse_project[REF_CAPACITY], browse_title[160];
 extern ChatMessage chat[CHAT_CAPACITY];
 extern int chat_count, chat_revision;
 extern char selected_ref[REF_CAPACITY], selected_title[160], session_status[32], hub_status[256];
-extern bool hub_ready, hub_loading, hub_has_older, hub_hydrated;
+extern bool hub_ready, hub_loading, hub_has_older, hub_has_newer, hub_hydrated;
 void hub_connect(void);
 void hub_update(void);
 void hub_close(void);
@@ -32,10 +32,15 @@ void hub_browse(enum BrowseKind kind, const char *project, const char *title, in
 bool hub_select(const NavigationRow *row);
 /* Keep the visible row when bounded history merges evict an edge. */
 void hub_set_reading_anchor(const char *key);
+void hub_set_reading(bool reading);
+void hub_set_prefetch_paused(bool paused);
+/* Selected read/send work that must take priority over routine maintenance. */
+bool hub_foreground_busy(void);
 /* Checkpoint the cached window before carrying its snapshot across relaunch. */
 bool hub_save_view(char *snapshot, size_t capacity);
 bool hub_restore_view(const NavigationRow *row, const char *snapshot);
 void hub_older(void);
+void hub_newer(void);
 void hub_latest(void);
 void hub_send(void);
 bool hub_send_pending(void);
