@@ -610,7 +610,7 @@ def render(args):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--manifest',default=str(ROOT/'footage.preview.json'))
+    parser.add_argument('--manifest',default=str(ROOT/'footage.json'))
     parser.add_argument('--out',default=str(ROOT/'promo-preview.mp4'))
     parser.add_argument('--frames',nargs='+',type=float)
     parser.add_argument('--audio')
