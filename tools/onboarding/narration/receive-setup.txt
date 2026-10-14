@@ -1,0 +1,1 @@
+Open Receive setup. On an existing installation, find it under Actions in the system menu.

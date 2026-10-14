@@ -1,0 +1,1 @@
+In the Hub, open Settings, Mobile app, then Pair using sound. Check the Hub address, choose Tailscale, and create an invitation.

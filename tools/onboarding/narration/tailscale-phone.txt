@@ -1,0 +1,1 @@
+If enrollment is needed, scan the Tailscale code on the Playdate. On your phone, sign in and authorize the device on the Hub’s tailnet. Phone approval was not recorded.

@@ -1,0 +1,83 @@
+{
+  "method": "Entire decoded RGB streams, all video frames, compared before and after lossless repacking",
+  "clips": [
+    {
+      "file": "sources/comparison.mp4",
+      "lossless_intermediate": "sources/comparison.mkv",
+      "decoded_rgb_sha256": "bc2ed8c866ea5cf973c58e1fb964dbe106031e0e8425f4585d9e3861bf301bbb",
+      "decoded_rgb_equal": true,
+      "intermediate_bytes": 18025390,
+      "selected_bytes": 205488
+    },
+    {
+      "file": "sources/dictate.mp4",
+      "original": "device-02-voice-send.mp4",
+      "original_range_seconds": [
+        130.3,
+        136.3
+      ],
+      "decoded_rgb_sha256": "3b2f5c4b616fb2657c6fc747e9162aa99ef74163975d1a7a3b4b76a1cca12d4e",
+      "decoded_rgb_equal": true,
+      "selected_bytes": 216425
+    },
+    {
+      "file": "sources/production-browser.mp4",
+      "lossless_intermediate": "sources/production-browser.mkv",
+      "decoded_rgb_sha256": "a39f844d400565dfce788f2e7af1f8d51222ba6bee7ffe17dc7aad168a76504e",
+      "decoded_rgb_equal": true,
+      "intermediate_bytes": 21794538,
+      "selected_bytes": 262242
+    },
+    {
+      "file": "sources/production-receiver.mp4",
+      "lossless_intermediate": "sources/production-receiver.mkv",
+      "decoded_rgb_sha256": "1335cc369c3ee73bc338a36f90e1dbb0e2bbb3fa61b248485f08913121ad1849",
+      "decoded_rgb_equal": true,
+      "intermediate_bytes": 2481660,
+      "selected_bytes": 38642
+    },
+    {
+      "file": "sources/read-reply.mp4",
+      "lossless_intermediate": "sources/read-reply.mkv",
+      "decoded_rgb_sha256": "bd75c09512475f40859a03326ff20d02f230f3f57e791f32b957841292afff0f",
+      "decoded_rgb_equal": true,
+      "intermediate_bytes": 28173787,
+      "selected_bytes": 478740
+    },
+    {
+      "file": "sources/review.mp4",
+      "original": "device-02-voice-send.mp4",
+      "original_range_seconds": [
+        136.3,
+        151.3
+      ],
+      "decoded_rgb_sha256": "b55cb32c7760906c9175ccd045f4f15e3ce475bfaab0e1020651cb8a9561bd86",
+      "decoded_rgb_equal": true,
+      "selected_bytes": 512484
+    },
+    {
+      "file": "sources/save-destination.mp4",
+      "lossless_intermediate": "sources/save-destination.mkv",
+      "decoded_rgb_sha256": "a5d9f99b693a648777c5702204cc8d394577128207b3de97d304edfaadf41540",
+      "decoded_rgb_equal": true,
+      "intermediate_bytes": 5475408,
+      "selected_bytes": 97032
+    },
+    {
+      "file": "sources/send.mp4",
+      "lossless_intermediate": "sources/send.mkv",
+      "decoded_rgb_sha256": "7549615e9f2cb29b9cc8c176d5e62a30d05599aa1fa7ae027165d6175c4dfee8",
+      "decoded_rgb_equal": true,
+      "intermediate_bytes": 11405405,
+      "selected_bytes": 320080
+    },
+    {
+      "file": "sources/test-session.mp4",
+      "lossless_intermediate": "sources/test-session.mkv",
+      "decoded_rgb_sha256": "3af286c40f64eb3736b4e8427275d8a6691327b62d8fe3b56efe9d5dcd0da570",
+      "decoded_rgb_equal": true,
+      "intermediate_bytes": 5407443,
+      "selected_bytes": 70768
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+Review the destination on the Playdate, then press A to save it. The client connects and opens your sessions.

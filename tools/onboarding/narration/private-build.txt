@@ -1,0 +1,1 @@
+Build Evener in setup-only mode with your own OpenAI key. Keep that bundle private. Use USB Data Disk mode to copy Evener dot P D X into Games, then eject and open it.
