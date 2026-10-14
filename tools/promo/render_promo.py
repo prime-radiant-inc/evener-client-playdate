@@ -29,6 +29,9 @@ MUTED = (139, 146, 141)
 WHITE = (255, 255, 253)
 DISPLAY_RECT = (50, 49, 440, 264)
 A_BUTTON_CENTER = (469, 421)
+DEVICE_SIZE = (800, 700)
+CASE_DEPTH = 72
+DEPTH_PROJECTION = (.5, .12)
 FONT = '/System/Library/Fonts/Avenir Next.ttc'
 SCENES = [(0,6,'intro'),(6,14,'setup'),(14,22,'read'),(22,30,'voice'),
           (30,36,'review'),(36,44,'native'),(44,50,'hero'),(50,58,'end')]
@@ -252,14 +255,72 @@ class ScaledDraw:
         return invoke
 
 
+def project_side(x,y,z):
+    """Keep the captured front flat while exposing the right side in depth."""
+    return x+z*DEPTH_PROJECTION[0],y+z*DEPTH_PROJECTION[1]
+
+
+def side_prism(draw,section,x0,x1,face,edge):
+    """Extrude a counterclockwise (y,z) outline along the right-facing axle."""
+    for a,b in zip(section,section[1:]+section[:1]):
+        dy,dz=b[0]-a[0],b[1]-a[1]
+        # Only the edges facing this oblique camera are visible.
+        if dy+DEPTH_PROJECTION[1]*dz>0:
+            draw.polygon([project_side(x,*p) for x,p in
+                          [(x0,a),(x0,b),(x1,b),(x1,a)]],fill=edge)
+    draw.polygon([project_side(x1,*p) for p in section],fill=face)
+
+
+@lru_cache(8)
+def arc_points(start,stop,count):
+    """Unit arc samples are fixed across all translated and rotated parts."""
+    return tuple((math.cos(a),math.sin(a)) for a in np.linspace(start,stop,count))
+
+
+def crank_assembly(draw,phase):
+    """The axle points right; the arm orbits in the perpendicular y/z plane."""
+    pivot_y,pivot_z=304,CASE_DEPTH/2
+    theta=phase+1.15
+    uy,uz=math.cos(theta),math.sin(theta)
+    end_y,end_z=pivot_y+149*uy,pivot_z+149*uz
+
+    def circle(y,z,r):
+        return [(y+r*c,z+r*s) for c,s in arc_points(0,2*math.pi,25)[:-1]]
+
+    # A short axle leaves the case side wall, behind the broad metal plate.
+    side_prism(draw,circle(pivot_y,pivot_z,18),577,587,
+               (87,94,89),(151,159,152))
+    section=[]
+    for y,z,start in [(pivot_y,pivot_z,math.pi/2),
+                      (end_y,end_z,3*math.pi/2)]:
+        for c,s in arc_points(start,start+math.pi,13):
+            along,across=18*c,18*s
+            section.append((y+uy*along-uz*across,z+uz*along+uy*across))
+    side_prism(draw,section,587,595,(113,121,116),(218,223,214))
+    draw.line([project_side(595,*p) for p in section]+[project_side(595,*section[0])],
+              fill=(64,72,66),width=1)
+    side_prism(draw,circle(pivot_y,pivot_z,6),595,596,
+               YELLOW,(188,144,24))
+
+    # The freely turning yellow paddle projects outward from the arm's tip.
+    side_prism(draw,circle(end_y,end_z,13),595,601,
+               (240,188,23),(181,132,13))
+    grip=[]
+    for y,z,start in [(end_y+19,end_z+4,0),(end_y-19,end_z+4,math.pi/2),
+                      (end_y-19,end_z-4,math.pi),(end_y+19,end_z-4,3*math.pi/2)]:
+        for c,s in arc_points(start,start+math.pi/2,5):
+            grip.append((y+6*c,z+6*s))
+    side_prism(draw,grip,602,674,(235,178,17),(255,216,63))
+
+
 @lru_cache(1)
 def housing():
     """Graphic front housing, proportioned from the supplied Playdate reference."""
-    im=Image.new('RGBA',(1440,1400))
+    im=Image.new('RGBA',(DEVICE_SIZE[0]*2,DEVICE_SIZE[1]*2))
     d=ScaledDraw(im)
-    # The almost-square front has a shallow side wall and an asymmetric bezel.
-    d.rounded_rectangle((24,17,584,605),radius=30,fill=(158,117,10))
-    d.rounded_rectangle((21,13,581,601),radius=30,fill=(224,173,16))
+    # The back shares the crank's depth projection, exposing its mounting wall.
+    dx,dy=project_side(0,0,CASE_DEPTH)
+    d.rounded_rectangle((17+dx,10+dy,577+dx,598+dy),radius=29,fill=(216,165,17))
     d.rounded_rectangle((17,10,577,598),radius=29,fill=YELLOW)
     d.rounded_rectangle((20,13,574,595),radius=27,outline=(255,232,112),width=2)
     d.rounded_rectangle((24,17,516,337),radius=25,fill=(42,45,42))
@@ -309,36 +370,25 @@ def device(im,screen,cx,cy,scale=1.,angle=0.,crank=0.,hold=0.,shadow=True):
     src=screen.resize((sw*2,sh*2),Image.Resampling.NEAREST)
     body.paste(src,(sx*2,sy*2))
     d=ScaledDraw(body)
-    # The axle sits halfway down the right edge, level with the display's
-    # lower edge. The yellow axle cap stays fixed while the handle turns.
-    px,py=601,304
-    gx=px+11*math.cos(crank)
-    gy=py+149*math.sin(crank)
-    rounded_line(d,[(582,py),(px,py)],(126,135,130),17)
-    # The inward-facing grip can disappear behind the case during its orbit.
-    hx=max(578,gx-24)
-    if gx-12>hx:
-        d.rounded_rectangle((hx,gy-18,gx-12,gy+18),radius=5,
-                            fill=YELLOW,outline=(165,127,26),width=1)
-    rounded_line(d,[(gx-12,gy),(gx,gy)],(126,135,130),13)
-    rounded_line(d,[(px+2,py+3),(gx+2,gy+3)],(91,100,95),24)
-    rounded_line(d,[(px,py),(gx,gy)],(192,201,195),22)
-    rounded_line(d,[(px-4,py-2),(gx-4,gy-2)],(232,236,227),4)
-    d.ellipse((px-12,py-12,px+12,py+12),fill=(184,193,187))
-    d.ellipse((px-7,py-7,px+7,py+7),fill=YELLOW,outline=(165,127,26),width=1)
+    crank_assembly(d,crank)
     if hold>0:
         ax,ay=A_BUTTON_CENTER
         rad=43+5*math.sin(hold*4)
         d.ellipse((ax-rad,ay-rad,ax+rad,ay+rad),outline=(255,255,230),width=4)
         d.ellipse((ax-36,ay-36,ax+36,ay+36),outline=(255,248,180),width=3)
-    width=max(1,round(720*scale));height=max(1,round(700*scale))
+    width=max(1,round(DEVICE_SIZE[0]*scale));height=max(1,round(DEVICE_SIZE[1]*scale))
     body=body.resize((width,height),Image.Resampling.LANCZOS)
     # Reinsert screen after the housing resize to keep its monochrome pixel edges.
     exact=screen.resize((round(sw*scale),round(sh*scale)),Image.Resampling.NEAREST)
     body.paste(exact,(round(sx*scale),round(sy*scale)))
+    radians=0
     if abs(angle)>.05:
         body=body.rotate(angle,resample=Image.Resampling.BICUBIC,expand=True)
-    x=round(cx-body.width/2);y=round(cy-body.height/2)
+        radians=math.radians(angle)
+    # Extra transparent space holds the outward grip without moving the front.
+    offset=(width-round(720*scale))/2
+    x=round(cx-body.width/2+offset*math.cos(radians))
+    y=round(cy-body.height/2-offset*math.sin(radians))
     if shadow:
         # A soft elliptical grounding shadow is independent of the device motion.
         sw=round(580*scale);sh=round(76*scale)
@@ -444,8 +494,8 @@ def scene_read(t,F):
         detail=smooth((focus-.5)*2)
         text(im,'THE CONVERSATION,',127,278,25,INK,'demi',alpha=detail,tracking=1.5)
         text(im,'IN FOCUS.',127,324,25,INK,'demi',alpha=detail,tracking=1.5)
-        text(im,'Crank to scroll.',1510,751,27,INK,'medium',alpha=detail)
-        text(im,'Keep your place.',1510,800,24,(94,108,93),'regular',alpha=detail)
+        text(im,'Crank to scroll.',1510,852,27,INK,'medium',alpha=detail)
+        text(im,'Keep your place.',1510,900,24,(94,108,93),'regular',alpha=detail)
     return im
 
 
@@ -477,7 +527,7 @@ def scene_review(t,F):
         text(im,lab,xx-1,844,21,INK,'demi',anchor='mt',tracking=None)
     p=clamp((t-2.5)/.7)
     d.line((1011,800,1011+p*465,800),fill=INK,width=4)
-    device(im,F.frame('review',t),527,597,1.22,0,.7+.12*math.sin(t))
+    device(im,F.frame('review',t),527,597,1.22,0,1.9+.08*math.sin(t))
     return im
 
 
@@ -520,7 +570,7 @@ def scene_hero(t,F):
     kinetic_line(im,'Evener for Playdate',124,662,34,INK,t,.8,'demi')
     kinetic_line(im,'An experimental native client.',124,722,28,(99,85,30),t,1.,'regular')
     # A controlled floating hero rotation provides energy while screen content is real.
-    device(im,F.frame('hero',t),1378,575+8*math.sin(t),1.2+.32*(1-ease(t/2.2)),-2+4*math.sin(t*.52),t*.85)
+    device(im,F.frame('hero',t),1378,575+8*math.sin(t),1.2+.32*(1-ease(t/2.2)),-2+4*math.sin(t*.52),1.8+t*.85)
     return im
 
 
